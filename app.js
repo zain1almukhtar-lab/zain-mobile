@@ -648,12 +648,14 @@
         const opts = [['cash', 'كاش'], ['qi_card', 'كي كارد'], ...(st.kind === 'client' && st.client ? [['account', 'على الحساب']] : [])];
         if (!opts.some(([v]) => v === st.pay)) st.pay = 'cash';
         const owed = st.client?.owed_to || 0;
-        box.innerHTML = `${seg('pay', opts, st.pay)}
+        if (st.useBal === undefined) st.useBal = true;
+        box.innerHTML = `${owed ? `<label class="card" style="display:flex;gap:10px;align-items:center;padding:12px 14px;margin-bottom:12px"><input type="checkbox" id="usebal" ${st.useBal ? 'checked' : ''} style="width:20px;height:20px;accent-color:#d4af37"><span style="flex:1;font-size:14px">تسديد من المبلغ الذي له على المكتب <b class="amber num">${fmt(owed)}</b></span></label>` : ''}
+          ${seg('pay', opts, st.pay)}
           ${st.pay === 'account' ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-            ${owed ? `<label class="card" style="display:flex;gap:10px;align-items:center;padding:12px 14px"><input type="checkbox" id="usebal" checked style="width:20px;height:20px;accent-color:#d4af37"><span style="flex:1;font-size:14px">خصم من المبلغ الذي له على المكتب <b class="amber num">${fmt(owed)}</b></span></label>` : ''}
             ${moneyField('paid', 'المدفوع الآن (اختياري)', 0)}
             ${seg('pmethod', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}</div>` : ''}`;
         bindSeg(box, 'pay', (v) => { st.pay = v; paintPay(); });
+        const ub = box.querySelector('#usebal'); if (ub) ub.onchange = () => { st.useBal = ub.checked; };
         st.pmethod = bindSeg(box, 'pmethod');
       };
       sb.querySelector('#svcs').addEventListener('click', (e) => {
@@ -674,7 +676,9 @@
           client_id: st.client?.id || null,
           paid_amount: account ? Math.min(mval(sb, 'paid'), t) : t,
           method: account ? (st.pmethod?.() || 'cash') : st.pay,
-          use_balance: account && !!sb.querySelector('#usebal')?.checked,
+          // الرصيد أولاً: يُسدَّد من المبلغ الذي للعميل على المكتب، والباقي كاش/كي كارد أو دين
+          use_balance: !!st.client && (st.client.owed_to || 0) > 0 && st.useBal !== false,
+          pay_rest: !account,
           company_name: val(sb, 'company') || null,
         };
         if (!st.client) { payload.customer_name = val(sb, 'cname') || null; payload.customer_phone = val(sb, 'phone') || null; }
@@ -768,7 +772,7 @@
         const amount = mval(sb, 'amount'); const reason = val(sb, 'reason');
         if (!amount || !reason) return toast('أدخل المبلغ والسبب', true);
         if (p) sendOp('payables:update', { id: p.id, amount, reason }, `تعديل مبلغ ${c.name} → ${fmt(amount)}`);
-        else sendOp('payables:create', { client_id: c.id, amount, reason }, `مبلغ لـ ${c.name} ${fmt(amount)}`);
+        else sendOp('payables:create', { client_id: c.id, amount, reason, settle_debts: true }, `مبلغ لـ ${c.name} ${fmt(amount)}${c.balance ? ' (يُسدَّد منه دينه تلقائياً)' : ''}`);
       };
       sb.querySelector('#paid')?.addEventListener('click', () => sendOp('payables:pay', { id: p.id, method: m(), as_expense: false }, `دفع ${fmt(p.amount)} لـ ${c.name}`));
       sb.querySelector('#del')?.addEventListener('click', () => { if (confirm('حذف هذا المبلغ؟')) sendOp('payables:delete', { id: p.id }, `حذف مبلغ ${c.name}`); });
