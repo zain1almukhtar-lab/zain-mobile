@@ -506,7 +506,7 @@
     return `<div class="task">
       <button class="check ${late ? 'late' : ''}" data-act="done" data-v="${t.id}" aria-label="تم">${icon('check', 15)}</button>
       <div class="m" data-open="task:${t.id}"><b>${esc(t.title)}</b>
-        <span>${[t.company, t.client_name].filter(Boolean).map(esc).join(' · ')}${t.company || t.client_name ? ' · ' : ''}<span class="${late ? 'red' : ''}" style="display:inline">${dayLabel(t.due_date)}</span> · ${esc(t.assigned_name)}${t.postponed ? ` · أُجّل ${t.postponed}` : ''}</span></div>
+        <span>${[t.company, t.client_name].filter(Boolean).map(esc).join(' · ')}${t.company || t.client_name ? ' · ' : ''}<span class="${late ? 'red' : ''}" style="display:inline">${dayLabel(t.due_date)}</span> · ${esc(t.assigned_name)}${t.postponed ? ` · أُجّل ${t.postponed}` : ''}</span>${t.sale_receipt ? `<span class="green" style="display:block">✓ مستلم ${fmt(t.sale_paid)}${t.sale_total > t.sale_paid ? ` · متبقي ${fmt(t.sale_total - t.sale_paid)}` : ''}</span>` : ''}</div>
       <button class="later" data-act="later" data-v="${t.id}">تأجيل</button>
     </div>`;
   }
@@ -837,11 +837,11 @@
     const rows = S.snap.closings || [];
     const short = rows.filter((r) => r.difference < 0).reduce((a, r) => a + r.difference, 0);
     return `
-      <div class="kpis">${kpi('مطابقات آخر 30 يوماً', `<span class="num">${rows.length}</span>`)}${kpi('مجموع النقص', `<span class="${short ? 'red' : 'green'}">${money(Math.abs(short))}</span>`)}</div>
+      <div class="kpis">${kpi('أيام الجرد (30 يوماً)', `<span class="num">${rows.length}</span>`)}${kpi('مجموع النقص', `<span class="${short ? 'red' : 'green'}">${money(Math.abs(short))}</span>`)}</div>
       <div class="card flush list">${rows.length ? rows.map((r) => `<div class="item"><div class="av ${r.difference < 0 ? 'red' : r.difference > 0 ? 'green' : 'gray'}">${initial(r.full_name)}</div>
-        <div class="m"><b>${esc(r.full_name)}</b><span>${dayLabel(r.day)} · المتوقع ${fmt(r.expected_cash)} · المعدود ${fmt(r.counted_cash)}${r.notes ? ` · ${esc(r.notes)}` : ''}</span></div>
+        <div class="m"><b>${dayLabel(r.day)}</b><span>جرده ${esc(r.full_name)} · المتوقع ${fmt(r.expected_cash)} · المعدود ${fmt(r.counted_cash)}${r.notes ? ` · ${esc(r.notes)}` : ''}</span></div>
         <div class="e"><b class="num ${r.difference < 0 ? 'red' : r.difference > 0 ? 'green' : ''}">${r.difference > 0 ? '+' : ''}${fmt(r.difference)}</b><span class="chip ${r.difference ? (r.difference < 0 ? 'red' : 'green') : 'green'}">${r.difference === 0 ? 'مطابق' : r.difference < 0 ? 'نقص' : 'زيادة'}</span></div></div>`).join('') : '<div class="empty">لا توجد مطابقات صندوق بعد</div>'}</div>
-      <div class="foot-note">يجرد الموظف صندوقه من برنامج المكتب (صفحة الصندوق)</div>`;
+      <div class="foot-note">جرد الصندوق الرئيسي يتم من برنامج المكتب (صفحة الصندوق)</div>`;
   }
 
   function expenseSheet(id = null) {
