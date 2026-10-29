@@ -488,7 +488,7 @@
       </div>
 
       <h2 class="sec">آخر التعديلات على النظام <button class="more" data-act="activity">عرض الكل</button></h2>
-      <div class="card flush">${(sn.audit || []).length ? sn.audit.slice(0, 6).map(auditRow).join('') : '<div class="empty">لا يوجد نشاط بعد</div>'}</div>
+      <div class="card flush">${auditList().length ? auditList().slice(0, 6).map(auditRow).join('') : '<div class="empty">لا يوجد نشاط بعد</div>'}</div>
 
       <h2 class="sec">جدول الأعمال — اليوم والمتأخرة <button class="more" data-act="tasks">عرض الكل</button></h2>
       <div class="card flush">${tasks.length ? tasks.slice(0, 6).map(taskRow).join('') : '<div class="empty">لا توجد أعمال مطلوبة اليوم</div>'}
@@ -506,12 +506,14 @@
       <div class="foot-note">آخر مزامنة ${new Date(sn.at).toLocaleString('ar-IQ-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' })}</div>`;
   }
 
+  const hm12 = (t) => { const h = Number(t.slice(0, 2)); return `${((h + 11) % 12) + 1}:${t.slice(3, 5)} ${h < 12 ? 'ص' : 'م'}`; };
+  const REACT = { star: '⭐ ممتاز', thanks: '👍 شكراً', note: '💬 ملاحظة' };
   function taskRow(t) {
     const late = t.due_date < todayStr();
     return `<div class="task">
       <button class="check ${late ? 'late' : ''}" data-act="done" data-v="${t.id}" aria-label="تم">${icon('check', 15)}</button>
       <div class="m" data-open="task:${t.id}"><b>${esc(t.title)}</b>
-        <span>${[t.company, t.client_name].filter(Boolean).map(esc).join(' · ')}${t.company || t.client_name ? ' · ' : ''}<span class="${late ? 'red' : ''}" style="display:inline">${dayLabel(t.due_date)}</span> · ${esc(t.assigned_name)}${t.postponed ? ` · أُجّل ${t.postponed}` : ''}</span>${t.sale_receipt ? `<span class="green" style="display:block">✓ مستلم ${fmt(t.sale_paid)}${t.sale_total > t.sale_paid ? ` · متبقي ${fmt(t.sale_total - t.sale_paid)}` : ''}</span>` : ''}</div>
+        <span>${[t.company, t.client_name].filter(Boolean).map(esc).join(' · ')}${t.company || t.client_name ? ' · ' : ''}<span class="${late ? 'red' : ''}" style="display:inline">${dayLabel(t.due_date)}</span>${t.remind_at ? ` · ⏰ ${hm12(t.remind_at)}` : ''}${t.priority ? ` · <span class="${t.priority === 2 ? 'red' : 'amber'}" style="display:inline">${t.priority === 2 ? 'عاجل' : 'مهم'}</span>` : ''} · ${esc(t.assigned_name)}${t.postponed ? ` · أُجّل ${t.postponed}` : ''}</span>${t.sale_receipt ? `<span class="green" style="display:block">✓ مستلم ${fmt(t.sale_paid)}${t.sale_total > t.sale_paid ? ` · متبقي ${fmt(t.sale_total - t.sale_paid)}` : ''}</span>` : ''}</div>
       <button class="later" data-act="later" data-v="${t.id}">تأجيل</button>
     </div>`;
   }
@@ -921,19 +923,27 @@
     }
     openSheet('تفاصيل العملية', `<div class="card"><b style="line-height:1.6">${esc(a.summary)}</b>
       ${a.reason ? `<div class="kv"><span>السبب</span><b class="amber">${esc(a.reason)}</b></div>` : ''}
-      <div class="kv"><span>بواسطة</span><b>${esc(a.user_name || '—')}</b></div><div class="kv"><span>الجهاز</span><b>${esc(a.source || '—')}</b></div><div class="kv"><span>الوقت</span><b>${dayTime(a.at)}</b></div></div>${body}`);
+      <div class="kv"><span>بواسطة</span><b>${esc(a.user_name || '—')}</b></div><div class="kv"><span>الجهاز</span><b>${esc(a.source || '—')}</b></div><div class="kv"><span>الوقت</span><b>${dayTime(a.at)}</b></div></div>${body}
+      <button class="btn btn-ghost btn-block red" id="adel">${icon('trash', 17)} حذف من السجل</button>`, (sb) => {
+      sb.querySelector('#adel').onclick = () => { if (confirm('حذف هذا النشاط من السجل؟')) sendOp('audit:delete', { ids: [a.id] }, `حذف نشاط: ${a.summary.slice(0, 40)}`); };
+    });
   }
+  // الأنشطة المحذوفة من الآيفون تختفي فوراً (قبل أن يطبقها جهاز المكتب)
+  const auditHidden = () => { const h = new Set(); queue().filter((o) => o.type === 'audit:delete').forEach((o) => (o.payload.ids || []).forEach((i) => h.add(i))); return h; };
+  const auditList = () => { const h = auditHidden(); return (S.snap.audit || []).filter((a) => !h.has(a.id)); };
   function bindAudit(root) {
     root.querySelectorAll('[data-audit]').forEach((el) => { el.onclick = () => { const a = (S.snap.audit || []).find((x) => String(x.id) === el.dataset.audit); if (a) auditDetail(a); }; });
   }
   function activitySheet() {
-    const all = S.snap.audit || [];
+    const all = auditList();
     const types = [['', 'الكل'], ['sale', 'الفواتير'], ['client', 'العملاء'], ['expense', 'المصاريف'], ['task', 'الأعمال']];
     let type = ''; let q = '';
     openSheet('سجل النشاط', `
       <div class="search">${icon('search', 18)}<input class="input" id="aq" type="search" placeholder="بحث: فاتورة، اسم، سبب"></div>
       <div class="chips" id="at">${types.map(([k, l]) => `<button data-t="${k}" class="${k === type ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <div class="card flush" id="alist"></div>`, (sb) => {
+      <div class="card flush" id="alist"></div>
+      <button class="btn btn-ghost btn-block" id="dlogin">${icon('trash', 17)} حذف كل تسجيلات الدخول من السجل</button>`, (sb) => {
+      sb.querySelector('#dlogin').onclick = () => { const ids = all.filter((a) => a.action === 'auth:login').map((a) => a.id); if (!ids.length) return toast('لا توجد تسجيلات دخول', true); if (confirm(`حذف ${ids.length} من تسجيلات الدخول؟`)) sendOp('audit:delete', { ids }, `حذف ${ids.length} تسجيل دخول من السجل`); };
       const paint = () => {
         const rows = all.filter((a) => (!type || a.entity === type) && (!q || `${a.summary} ${a.reason || ''} ${a.user_name || ''}`.includes(q)));
         sb.querySelector('#alist').innerHTML = rows.length ? rows.map(auditRow).join('') : '<div class="empty">لا يوجد</div>';
@@ -949,8 +959,25 @@
     const list = S.snap.tasks || [];
     openSheet('جدول الأعمال', `
       <button class="btn btn-gold btn-block" id="new">${icon('plus', 17)} عمل جديد</button>
-      <div class="card flush">${list.length ? list.map(taskRow).join('') : '<div class="empty">لا توجد أعمال مفتوحة</div>'}</div>`, (sb) => {
+      <div class="card flush">${list.length ? list.map(taskRow).join('') : '<div class="empty">لا توجد أعمال مفتوحة</div>'}</div>
+      <h2 class="sec" style="margin:4px 4px 0">إنجازات الموظفين — آخر 3 أيام</h2>
+      <div class="card flush">${(S.snap.doneTasks || []).length ? S.snap.doneTasks.map((t) => {
+        const sent = queue().find((o) => o.type === 'tasks:react' && o.payload.id === t.id);
+        const r = sent ? sent.payload.reaction : t.reaction;
+        return `<div class="item noic" style="align-items:flex-start"><div class="m"><b style="white-space:normal">${esc(t.done_name || '')} أنجز: ${esc(t.title)}</b>
+          <span>${esc(t.company || t.client_name || '')}${t.company || t.client_name ? ' · ' : ''}${dayTime(t.done_at)}</span>
+          ${t.done_note ? `<span style="white-space:normal">«${esc(t.done_note)}»</span>` : ''}
+          <div class="chips" style="margin-top:6px">${Object.entries(REACT).map(([k, l]) => `<button data-react="${t.id}:${k}" class="${r === k ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>`;
+      }).join('') : '<div class="empty">لا توجد إنجازات حديثة</div>'}</div>`, (sb) => {
       sb.querySelector('#new').onclick = () => taskSheet();
+      sb.querySelectorAll('[data-react]').forEach((b) => { b.onclick = () => {
+        const [id, reaction] = b.dataset.react.split(':'); const t = S.snap.doneTasks.find((x) => String(x.id) === id);
+        if (reaction === 'note') {
+          openSheet('ملاحظة للموظف', `<div class="card"><b>${esc(t.title)}</b></div><input class="input" name="n" placeholder="اكتب ملاحظتك"><button class="btn btn-gold btn-block" id="ok">إرسال</button>`, (s2) => {
+            s2.querySelector('#ok').onclick = () => { const n = val(s2, 'n'); if (!n) return toast('اكتب الملاحظة', true); sendOp('tasks:react', { id: t.id, reaction, note: n }, `رد على إنجاز: ${t.title}`); };
+          });
+        } else sendOp('tasks:react', { id: t.id, reaction }, `${REACT[reaction]} — ${t.title}`);
+      }; });
       sb.querySelectorAll('[data-act]').forEach((el) => { el.onclick = () => act(el.dataset.act, el.dataset.v); });
       bindRows(sb);
     });
@@ -966,6 +993,8 @@
       <input class="input" name="phone" inputmode="tel" placeholder="الهاتف" value="${esc(t?.phone || '')}">
       <div class="field"><label>اليوم</label><div class="chips wrap" id="days">${[['اليوم', td], ['غداً', addDays(td, 1)], ['بعد يومين', addDays(td, 2)], ['بعد أسبوع', addDays(td, 7)]].map(([l, d]) => `<button type="button" data-d="${d}" class="${d === due ? 'on' : ''}">${l}</button>`).join('')}</div>
         <input class="input" type="date" name="due" value="${due}"></div>
+      <div class="grid2"><div class="field"><label>وقت التذكير</label><input class="input" type="time" name="remind" value="${esc(t?.remind_at || '')}"></div>
+        <div class="field"><label>الأهمية</label><select class="input" name="pri">${[[0, 'عادي'], [1, 'مهم'], [2, 'عاجل']].map(([v, l]) => `<option value="${v}" ${(t?.priority || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="field"><label>مُسند إلى</label><select class="input" name="who">${users.map((u) => `<option value="${u.id}" ${(t ? t.assigned_to === u.id : u.role === 'admin') ? 'selected' : ''}>${esc(u.full_name)}</option>`).join('')}</select></div>
       <div class="field"><label>تفاصيل</label><textarea class="input" name="details" rows="2">${esc(t?.details || '')}</textarea></div>
       <button class="btn btn-gold btn-block" id="ok">حفظ</button>
@@ -973,7 +1002,7 @@
       const dueEl = sb.querySelector('[name="due"]');
       sb.querySelectorAll('[data-d]').forEach((b) => { b.onclick = () => { due = b.dataset.d; dueEl.value = due; sb.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('on', x === b)); }; });
       sb.querySelector('#ok').onclick = () => {
-        const p = { id: t?.id, title: val(sb, 'title'), company: val(sb, 'company'), client_name: val(sb, 'client'), phone: val(sb, 'phone'), details: val(sb, 'details'), due_date: dueEl.value, assigned_to: Number(val(sb, 'who')) || undefined };
+        const p = { id: t?.id, title: val(sb, 'title'), company: val(sb, 'company'), client_name: val(sb, 'client'), phone: val(sb, 'phone'), details: val(sb, 'details'), due_date: dueEl.value, assigned_to: Number(val(sb, 'who')) || undefined, remind_at: val(sb, 'remind') || null, priority: Number(val(sb, 'pri')) || 0 };
         if (!p.title || !p.due_date) return toast('اكتب العمل واختر اليوم', true);
         sendOp('tasks:save', p, `${t ? 'تعديل' : 'عمل'}: ${p.title}`);
       };
