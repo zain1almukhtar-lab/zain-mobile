@@ -1,7 +1,7 @@
 // Service Worker: يجعل التطبيق يفتح بدون إنترنت.
 // الشبكة أولاً: عند وجود إنترنت تُجلب دائماً أحدث نسخة من GitHub (فتظهر التحديثات فوراً)،
 // وبدون إنترنت تُستخدم النسخة المحفوظة. البيانات المشفّرة لا تمر من هنا.
-const VERSION = 'zm-v4';
+const VERSION = 'zm-v5';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.json', 'vendor/bcrypt.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

@@ -54,6 +54,7 @@
     logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
     chevR: '<path d="m9 6 6 6-6 6"/>', chevL: '<path d="m15 6-6 6 6 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    chat: '<path d="M3 21l1.7-5A8.5 8.5 0 1 1 8 19.4z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1.3-1.3-2-1-1 .8a4 4 0 0 1-2.3-2.3l.8-1-1-2z"/>',
     phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
     lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
     plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="M20 6 9 17l-5-5"/>',
@@ -701,6 +702,44 @@
   }
 
   // ═════════════ العملاء والديون ═════════════
+  // واتساب: رسالة جاهزة (المستخدم يضغط إرسال بنفسه)
+  function waLink(phone, text) {
+    let d = String(phone || '').replace(/\D/g, '');
+    if (d.startsWith('00')) d = d.slice(2);
+    if (d.startsWith('0')) d = `964${d.slice(1)}`;
+    else if (d.length === 10 && d.startsWith('7')) d = `964${d}`;
+    return /^\d{8,15}$/.test(d) ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : '';
+  }
+  function debtGroups() {
+    const sn = S.snap; const m = new Map();
+    sn.debts.forEach((x) => {
+      const key = x.client_id ? `c${x.client_id}` : `n${x.company_name || x.client_name}`;
+      const c = x.client_id ? sn.clients.find((k) => k.id === x.client_id) : null;
+      if (!m.has(key)) m.set(key, { key, client_id: x.client_id, name: c ? c.name : (x.company_name || x.client_name), phone: (c && c.phone) || x.client_phone || '', total: 0, oldest: 0, inv: [] });
+      const g = m.get(key); const due = x.total_amount - x.paid_amount; const age = daysSince(x.created_at);
+      g.total += due; g.oldest = Math.max(g.oldest, age); g.inv.push({ ...x, due, age });
+    });
+    return [...m.values()].sort((a, b) => b.oldest - a.oldest || b.total - a.total);
+  }
+  const ageTxt = (n) => (n === 0 ? 'اليوم' : n === 1 ? 'منذ يوم' : n === 2 ? 'منذ يومين' : `منذ ${n} ${n <= 10 ? 'أيام' : 'يوماً'}`);
+  function reminder(g) {
+    return `السلام عليكم ${g.name}،\nنود تذكيركم بأن المبلغ المتبقي على حسابكم لدى ${S.snap.office.name || 'المكتب'} هو ${fmt(g.total)} دينار عراقي.\n${g.inv.slice(0, 6).map((i) => `• ${i.receipt_no} — ${i.service_name || ''}: ${fmt(i.due)}`).join('\n')}\nشكراً لتعاملكم معنا.`;
+  }
+  function debtsView() {
+    const gs = debtGroups(); const b = { f: 0, m: 0, o: 0 };
+    gs.forEach((g) => g.inv.forEach((i) => { b[i.age < 30 ? 'f' : i.age <= 60 ? 'm' : 'o'] += i.due; }));
+    return `
+      <div class="aging">
+        <div class="ag" style="--c:var(--green)"><span>أقل من 30 يوماً</span><b class="num">${fmt(b.f)}</b></div>
+        <div class="ag" style="--c:var(--amber)"><span>30 – 60 يوماً</span><b class="num">${fmt(b.m)}</b></div>
+        <div class="ag" style="--c:var(--red)"><span>أكثر من 60</span><b class="num">${fmt(b.o)}</b></div>
+      </div>
+      <div class="card flush list">${gs.length ? gs.map((g) => { const wa = g.phone ? waLink(g.phone, reminder(g)) : ''; return `<div class="item dg">
+        <button class="av ${g.oldest > 60 ? 'red' : g.oldest > 30 ? 'amber' : 'gray'}" data-open="${g.client_id ? `client:${g.client_id}` : `debt:${g.inv[0].id}`}">${initial(g.name)}</button>
+        <button class="m" data-open="${g.client_id ? `client:${g.client_id}` : `debt:${g.inv[0].id}`}"><b>${esc(g.name)}</b><span>أقدمها ${ageTxt(g.oldest)} · ${g.inv.length} فاتورة</span></button>
+        <div class="e"><b class="red num">${fmt(g.total)}</b>${wa ? `<a class="chip green" href="${wa}" target="_blank" rel="noopener">${icon('chat', 13)} تذكير</a>` : '<span class="chip">بلا رقم</span>'}</div></div>`; }).join('') : '<div class="empty">لا توجد ديون مفتوحة ✓</div>'}</div>`;
+  }
+
   function clientList() {
     const q = S.cq.trim();
     const rows = S.snap.clients.filter((c) => !q || `${c.name} ${c.company || ''} ${c.phone || ''}`.includes(q))
@@ -716,6 +755,7 @@
     const sn = S.snap;
     const total = sn.debts.reduce((a, x) => a + (x.total_amount - x.paid_amount), 0);
     const owed = sn.payables.reduce((a, x) => a + x.amount, 0);
+    setTimeout(() => bindSeg($app.querySelector('#main'), 'cview', (v) => { S.cview = v; paintMain(); }));
     return `
       ${title('العملاء', `${sn.clients.length} عميل مسجل`, `<button class="btn btn-ghost btn-sm press" data-act="newClient">${icon('userPlus', 16)} عميل</button>`)}
       ${statusBars()}
@@ -723,9 +763,10 @@
         ${kpi('ديون لنا على العملاء', `<span class="red">${money(total)}</span>`, `${sn.debts.length} فاتورة`)}
         ${kpi('مبالغ يطلبونها منا', `<span class="amber">${money(owed)}</span>`, `${sn.payables.length} مبلغ`)}
       </div>
-      <div class="search">${icon('search', 18)}<input class="input" id="cq" type="search" placeholder="ابحث بالاسم أو الشركة أو الهاتف" value="${esc(S.cq)}"></div>
+      ${seg('cview', [['list', 'العملاء'], ['debts', 'الديون حسب العمر']], S.cview || 'list')}
+      ${(S.cview || 'list') === 'debts' ? debtsView() : `<div class="search">${icon('search', 18)}<input class="input" id="cq" type="search" placeholder="ابحث بالاسم أو الشركة أو الهاتف" value="${esc(S.cq)}"></div>`}
       ${pendingOf(['debts:settle', 'debts:settleClient', 'payables:create', 'payables:pay', 'payables:update', 'payables:delete', 'clients:save']).length ? `<div class="card flush">${pendingRows(['debts:settle', 'debts:settleClient', 'payables:create', 'payables:pay', 'payables:update', 'payables:delete', 'clients:save'])}</div>` : ''}
-      <div class="card flush list" id="clist">${clientList()}</div>`;
+      ${(S.cview || 'list') === 'list' ? `<div class="card flush list" id="clist">${clientList()}</div>` : ''}`;
   }
 
   function clientSheet(id) {
@@ -739,6 +780,7 @@
         <div class="av" style="width:52px;height:52px;font-size:20px">${initial(c.name)}</div>
         <div style="flex:1;min-width:0"><b style="font-size:16px">${esc(c.company || c.name)}</b><div class="muted" style="font-size:13px;margin-top:2px">${c.company && c.company !== c.name ? `${esc(c.name)} · ` : ''}<span class="num">${esc(c.phone || '')}</span></div></div>
         ${c.phone ? `<a class="icon-btn" style="color:var(--green)" href="tel:${esc(c.phone)}">${icon('phone', 19)}</a>` : ''}
+        ${c.phone && c.balance && waLink(c.phone, 'x') ? `<a class="icon-btn" style="color:var(--green)" target="_blank" rel="noopener" href="${waLink(c.phone, reminder(debtGroups().find((g) => g.client_id === c.id) || { name: c.name, total: c.balance, inv: [] }))}">${icon('chat', 19)}</a>` : ''}
       </div>
       <div class="kpis">${kpi('عليه للمكتب', `<span class="red">${money(c.balance)}</span>`, `${c.open_count} فاتورة`)}${kpi('له على المكتب', `<span class="amber">${money(c.owed_to)}</span>`)}</div>
       <div class="grid2">

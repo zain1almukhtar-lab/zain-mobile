@@ -1,33 +1,40 @@
+@font-face { font-family: Cairo; font-weight: 400; font-display: swap; src: url(fonts/cairo-arabic-400.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: Cairo; font-weight: 600; font-display: swap; src: url(fonts/cairo-arabic-600.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: Cairo; font-weight: 700; font-display: swap; src: url(fonts/cairo-arabic-700.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: Cairo; font-weight: 800; font-display: swap; src: url(fonts/cairo-arabic-800.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: Cairo; font-weight: 400; font-display: swap; src: url(fonts/cairo-latin-400.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F; }
+@font-face { font-family: Cairo; font-weight: 700; font-display: swap; src: url(fonts/cairo-latin-700.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F; }
+@font-face { font-family: Cairo; font-weight: 800; font-display: swap; src: url(fonts/cairo-latin-800.woff2) format('woff2'); unicode-range: U+0000-00FF, U+2000-206F; }
 /* مكتب زين المختار — نسخة الآيفون
    داكن + ذهبي، تصميم iOS: عناوين كبيرة، بطاقات ناعمة، أزرار للإبهام، أوراق منزلقة من الأسفل */
 :root {
-  --bg: #09090b;
-  --bg-2: #0f0f12;
-  --card: #151518;
-  --card-2: #1c1c21;
-  --card-3: #24242a;
+  --bg: #0b1020;
+  --bg-2: #0e1428;
+  --card: #141b2e;
+  --card-2: #1a2238;
+  --card-3: #222b44;
   --line: rgba(255, 255, 255, .07);
   --line-2: rgba(255, 255, 255, .12);
-  --ink: #f5f1e6;
-  --ink-2: #c8c1ae;
-  --muted: #8b8577;
-  --gold: #d4af37;
-  --gold-2: #ecd078;
+  --ink: #f2f4f9;
+  --ink-2: #b9c0d0;
+  --muted: #7f879b;
+  --gold: #c69c45;
+  --gold-2: #e3c37b;
   --gold-3: #a8862a;
-  --gold-soft: rgba(212, 175, 55, .12);
-  --gold-line: rgba(212, 175, 55, .35);
-  --green: #5ad19a;
-  --green-soft: rgba(90, 209, 154, .12);
-  --red: #ff7a72;
-  --red-soft: rgba(255, 122, 114, .12);
-  --amber: #f5b85a;
-  --amber-soft: rgba(245, 184, 90, .12);
-  --blue: #7fb0ff;
+  --gold-soft: rgba(227, 195, 123, .12);
+  --gold-line: rgba(227, 195, 123, .35);
+  --green: #2fc28c;
+  --green-soft: rgba(47, 194, 140, .14);
+  --red: #f06a80;
+  --red-soft: rgba(240, 106, 128, .14);
+  --amber: #f5b452;
+  --amber-soft: rgba(245, 180, 82, .14);
+  --blue: #6e98f5;
   --r: 20px;
   --tab-h: 62px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  --font: -apple-system, "SF Arabic", "SF Pro Text", "Geeza Pro", "Segoe UI", Tahoma, sans-serif;
+  --font: Cairo, -apple-system, "SF Arabic", "Geeza Pro", "Segoe UI", Tahoma, sans-serif;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -252,3 +259,19 @@ h2.sec .more { margin-inline-start: auto; color: var(--gold-2); font-size: 13px;
 .foot-note { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 0 0; }
 @media (min-width: 560px) { .kpis { grid-template-columns: repeat(3, 1fr); } .svc-grid { grid-template-columns: repeat(3, 1fr); } }
 .sheet .sb > * { flex-shrink: 0; }
+
+/* ═════ التصميم 2.0: كحلي + ذهبي (مطابق لبرنامج الحاسبة) ═════ */
+body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), transparent 60%), var(--bg); background-attachment: fixed; }
+.card { border: 1px solid var(--line); }
+.card.hero { background: linear-gradient(135deg, #111c35, #1a2a4f 60%, #24386a); border: 0; position: relative; overflow: hidden; }
+.card.hero::after { content: ''; position: absolute; left: -50px; bottom: -80px; width: 200px; height: 200px; border-radius: 50%; background: radial-gradient(circle, rgba(198,156,69,.35), transparent 65%); pointer-events: none; }
+.card.hero > * { position: relative; z-index: 1; }
+.btn-gold { background: linear-gradient(135deg, #e3c37b, #c69c45); color: #1a1405; }
+.tabs .fab { background: linear-gradient(135deg, #e3c37b, #c69c45); color: #1a1405; box-shadow: 0 10px 26px rgba(198,156,69,.4), 0 0 0 5px var(--bg); }
+.aging { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.aging .ag { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 10px 10px; position: relative; overflow: hidden; }
+.aging .ag::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--c); }
+.aging .ag span { font-size: 11px; color: var(--muted); font-weight: 700; display: block; }
+.aging .ag b { font-size: 16px; font-weight: 800; margin-top: 4px; display: block; color: var(--c); }
+.item.dg .m { text-align: right; background: none; border: 0; padding: 0; }
+.item.dg a.chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; }
