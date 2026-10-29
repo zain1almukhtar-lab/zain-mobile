@@ -1,13 +1,14 @@
-// Service Worker: يحفظ ملفات التطبيق ليفتح فوراً وبدون إنترنت.
-// البيانات نفسها (اللقطة المشفّرة) لا تمر من هنا؛ التطبيق يحفظ آخر نسخة منها بنفسه.
-const VERSION = 'zm-v2';
+// Service Worker: يجعل التطبيق يفتح بدون إنترنت.
+// الشبكة أولاً: عند وجود إنترنت تُجلب دائماً أحدث نسخة من GitHub (فتظهر التحديثات فوراً)،
+// وبدون إنترنت تُستخدم النسخة المحفوظة. البيانات المشفّرة لا تمر من هنا.
+const VERSION = 'zm-v3';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.json', 'vendor/bcrypt.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -18,18 +19,15 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// ملفات التطبيق: من الذاكرة فوراً ثم تحديث في الخلفية. أي طلب لموقع آخر (GitHub API) يمر مباشرة للشبكة.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    caches.open(VERSION).then(async (cache) => {
-      const hit = await cache.match(e.request, { ignoreSearch: true });
-      const net = fetch(e.request).then((res) => {
-        if (res.ok) cache.put(e.request, res.clone());
+    fetch(e.request, { cache: 'no-cache' })
+      .then((res) => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
         return res;
-      }).catch(() => hit);
-      return hit || net;
-    }),
+      })
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))),
   );
 });
