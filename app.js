@@ -401,6 +401,7 @@
     const cq = main.querySelector('#cq');
     if (cq) cq.oninput = () => { S.cq = cq.value; main.querySelector('#clist').innerHTML = clientList(); bindRows(main); };
     bindRows(main);
+    bindAudit(main);
   }
   function bindRows(root) {
     root.querySelectorAll('[data-open]').forEach((el) => {
@@ -421,6 +422,7 @@
     else if (a === 'day') S.invDay = v || null;
     else if (a === 'fin') S.fin = v;
     else if (a === 'tasks') return tasksSheet();
+    else if (a === 'activity') return activitySheet();
     else if (a === 'newExp') return expenseSheet();
     else if (a === 'newExt') return externalSheet();
     else if (a === 'newClient') return clientForm();
@@ -484,6 +486,9 @@
         ${kpi('الخصومات', money(d.discountTotal))}
         ${kpi('مدخولك الخارجي', `<span class="gold">${money(d.externalTotal)}</span>`)}
       </div>
+
+      <h2 class="sec">آخر التعديلات على النظام <button class="more" data-act="activity">عرض الكل</button></h2>
+      <div class="card flush">${(sn.audit || []).length ? sn.audit.slice(0, 6).map(auditRow).join('') : '<div class="empty">لا يوجد نشاط بعد</div>'}</div>
 
       <h2 class="sec">جدول الأعمال — اليوم والمتأخرة <button class="more" data-act="tasks">عرض الكل</button></h2>
       <div class="card flush">${tasks.length ? tasks.slice(0, 6).map(taskRow).join('') : '<div class="empty">لا توجد أعمال مطلوبة اليوم</div>'}
@@ -569,9 +574,12 @@
         ${rem > 0 && !x.is_void ? `<div class="kv"><span>المتبقي</span><b class="red num">${fmt(rem)}</b></div>` : ''}
         ${x.notes ? `<div class="kv"><span>ملاحظات</span><span>${esc(x.notes)}</span></div>` : ''}
       </div>
+      ${(x.payments || []).length ? `<h2 class="sec" style="margin:0 4px">تفاصيل التسديد</h2><div class="card flush">${x.payments.map((p) => `<div class="item noic"><div class="m"><b>${METHOD[p.method] || p.method} · ${({ initial: 'عند الإصدار', partial: 'دفعة', settlement: 'تسديد الدين', offset: 'من رصيده' })[p.kind] || ''}</b><span>${dayTime(p.created_at)} · استلمها ${esc(p.by_name)}</span></div><div class="e"><b class="green num">${fmt(p.amount)}</b></div></div>`).join('')}</div>` : '<div class="note">لم يُدفع أي مبلغ بعد (آجل)</div>'}
+      ${(() => { const h = (S.snap.audit || []).filter((a) => a.entity === 'sale' && a.entity_id === x.id); return h.length ? `<h2 class="sec" style="margin:0 4px">سجل الفاتورة</h2><div class="card flush">${h.map(auditRow).join('')}</div>` : ''; })()}
       ${x.is_void ? '<div class="alert">هذه الفاتورة ملغاة</div>' : `
       ${rem > 0 ? `<button class="btn btn-gold btn-block" id="pay">${icon('cash', 18)} تسجيل دفعة / تسديد</button>` : ''}
       <button class="btn btn-danger btn-block" id="void">إلغاء الفاتورة</button>`}`, (sb) => {
+      bindAudit(sb);
       sb.querySelector('#pay')?.addEventListener('click', () => paySheet(x, client));
       sb.querySelector('#void')?.addEventListener('click', () => {
         const reason = prompt('سبب إلغاء الفاتورة؟');
@@ -888,6 +896,55 @@
   }
 
   // ═════════════ جدول الأعمال ═════════════
+  // ───── سجل النشاط (كل التعديلات على النظام) ─────
+  function auditRow(a) {
+    const red = /delete|void/.test(a.action || ''); const amber = /update/.test(a.action || '');
+    return `<button class="item noic" data-audit="${a.id}" style="align-items:flex-start">
+      <span style="width:9px;height:9px;border-radius:50%;margin-top:7px;flex:none;background:${red ? 'var(--red)' : amber ? 'var(--amber)' : 'var(--gold)'}"></span>
+      <div class="m"><b style="white-space:normal;line-height:1.5">${esc(a.summary)}</b>
+        ${a.reason ? `<span class="amber" style="white-space:normal">السبب: ${esc(a.reason)}</span>` : ''}
+        <span>${dayTime(a.at)}${a.user_name ? ` · ${esc(a.user_name)}` : ''}${a.source ? ` · ${esc(a.source)}` : ''}</span></div></button>`;
+  }
+  function auditDetail(a) {
+    const d = a.details; let body = '';
+    if (d?.before) {
+      const b = d.before; const f = d.after; const rows = [];
+      const cmp = (l, x, y, mny) => { if ((x ?? '') !== (y ?? '')) rows.push(`<div class="kv"><span>${l}</span><span><s class="muted">${esc(mny ? fmt(x) : x || '—')}</s> ← <b>${esc(mny ? fmt(y) : y || '—')}</b></span></div>`); };
+      cmp('المجموع', b.total, f.total, 1); cmp('المدفوع', b.paid, f.paid, 1); cmp('العميل', b.client, f.client); cmp('الشركة', b.company, f.company); cmp('ملاحظات', b.notes, f.notes);
+      const k = (i) => `${i.name}|${i.price}`; const bi = b.items.map(k); const fi = f.items.map(k);
+      b.items.filter((i) => !fi.includes(k(i))).forEach((i) => rows.push(`<div class="kv"><span class="red">حُذفت</span><span>${esc(i.name)} ${fmt(i.price)}</span></div>`));
+      f.items.filter((i) => !bi.includes(k(i))).forEach((i) => rows.push(`<div class="kv"><span class="green">أضيفت</span><span>${esc(i.name)} ${fmt(i.price)}</span></div>`));
+      if (d.payment) rows.push(`<div class="kv"><span class="green">دفعة</span><span>${fmt(d.payment.amount)} ${METHOD[d.payment.method] || ''}</span></div>`);
+      body = `<div class="card">${rows.join('') || '<div class="muted">لا فرق ظاهر</div>'}</div>`;
+    } else if (d?.deleted) {
+      body = `<div class="card flush">${d.deleted.map((x) => `<div class="item noic"><div class="m"><b>${esc(x.receipt_no)} · ${esc(x.company_name || x.client_name)}</b><span style="white-space:normal">${x.items.map((i) => `${esc(i.name)} ${fmt(i.price)}`).join('، ')}</span></div><div class="e"><b class="num red">${fmt(x.total_amount)}</b></div></div>`).join('')}</div>`;
+    }
+    openSheet('تفاصيل العملية', `<div class="card"><b style="line-height:1.6">${esc(a.summary)}</b>
+      ${a.reason ? `<div class="kv"><span>السبب</span><b class="amber">${esc(a.reason)}</b></div>` : ''}
+      <div class="kv"><span>بواسطة</span><b>${esc(a.user_name || '—')}</b></div><div class="kv"><span>الجهاز</span><b>${esc(a.source || '—')}</b></div><div class="kv"><span>الوقت</span><b>${dayTime(a.at)}</b></div></div>${body}`);
+  }
+  function bindAudit(root) {
+    root.querySelectorAll('[data-audit]').forEach((el) => { el.onclick = () => { const a = (S.snap.audit || []).find((x) => String(x.id) === el.dataset.audit); if (a) auditDetail(a); }; });
+  }
+  function activitySheet() {
+    const all = S.snap.audit || [];
+    const types = [['', 'الكل'], ['sale', 'الفواتير'], ['client', 'العملاء'], ['expense', 'المصاريف'], ['task', 'الأعمال']];
+    let type = ''; let q = '';
+    openSheet('سجل النشاط', `
+      <div class="search">${icon('search', 18)}<input class="input" id="aq" type="search" placeholder="بحث: فاتورة، اسم، سبب"></div>
+      <div class="chips" id="at">${types.map(([k, l]) => `<button data-t="${k}" class="${k === type ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="card flush" id="alist"></div>`, (sb) => {
+      const paint = () => {
+        const rows = all.filter((a) => (!type || a.entity === type) && (!q || `${a.summary} ${a.reason || ''} ${a.user_name || ''}`.includes(q)));
+        sb.querySelector('#alist').innerHTML = rows.length ? rows.map(auditRow).join('') : '<div class="empty">لا يوجد</div>';
+        bindAudit(sb);
+      };
+      sb.querySelector('#aq').oninput = (e) => { q = e.target.value.trim(); paint(); };
+      sb.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { type = b.dataset.t; sb.querySelectorAll('[data-t]').forEach((x) => x.classList.toggle('on', x === b)); paint(); }; });
+      paint();
+    });
+  }
+
   function tasksSheet() {
     const list = S.snap.tasks || [];
     openSheet('جدول الأعمال', `

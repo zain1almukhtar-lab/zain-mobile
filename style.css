@@ -251,3 +251,4 @@ h2.sec .more { margin-inline-start: auto; color: var(--gold-2); font-size: 13px;
 @keyframes drop { from { transform: translateY(-120%); } }
 .foot-note { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 0 0; }
 @media (min-width: 560px) { .kpis { grid-template-columns: repeat(3, 1fr); } .svc-grid { grid-template-columns: repeat(3, 1fr); } }
+.sheet .sb > * { flex-shrink: 0; }
