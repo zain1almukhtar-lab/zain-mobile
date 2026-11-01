@@ -863,7 +863,7 @@
       <div class="card hero"><div class="lbl">مصاريف الشهر</div><div class="big"><span class="num">${fmt(total)}</span><small>د.ع</small></div>
         <button class="btn btn-gold btn-sm press" data-act="newExp">${icon('plus', 16)} مصروف جديد</button></div>
       ${byCat.length ? `<div class="card">${bars(byCat, 'category', 'total')}</div>` : ''}
-      <div class="card flush list">${pendingRows(['expenses:create', 'expenses:update', 'expenses:delete'])}${rows.length ? rows.map((x) => `<button class="item" data-open="exp:${x.id}"><div class="av gray">${icon('wallet', 18)}</div><div class="m"><b>${esc(x.category)}</b><span>${dayLabel(x.expense_date)}${x.notes ? ` · ${esc(x.notes)}` : ''}</span></div><div class="e"><b class="num">${fmt(x.amount)}</b></div></button>`).join('') : '<div class="empty">لا توجد مصاريف في هذا الشهر</div>'}</div>`;
+      <div class="card flush list">${pendingRows(['expenses:create', 'expenses:update', 'expenses:delete'])}${rows.length ? rows.map((x) => `<button class="item" data-open="exp:${x.id}"><div class="av gray">${icon('wallet', 18)}</div><div class="m"><b>${esc(x.category)}</b><span>${dayLabel(x.expense_date)}${x.from_box ? ' · من الصندوق' : ''}${x.notes ? ` · ${esc(x.notes)}` : ''}</span></div><div class="e"><b class="num">${fmt(x.amount)}</b></div></button>`).join('') : '<div class="empty">لا توجد مصاريف في هذا الشهر</div>'}</div>`;
   }
   function finExternal() {
     const y = String(new Date().getFullYear());
@@ -891,12 +891,20 @@
   function finCash() {
     const rows = S.snap.closings || [];
     const short = rows.filter((r) => r.difference < 0).reduce((a, r) => a + r.difference, 0);
+    const qiShort = rows.filter((r) => r.qi_difference < 0).reduce((a, r) => a + r.qi_difference, 0);
+    const bad = (r) => r.difference < 0 || r.qi_difference < 0;
+    const lab = (v, lo, hi) => (v === 0 ? 'مطابق' : v < 0 ? lo : hi);
     return `
-      <div class="kpis">${kpi('أيام الجرد (30 يوماً)', `<span class="num">${rows.length}</span>`)}${kpi('مجموع النقص', `<span class="${short ? 'red' : 'green'}">${money(Math.abs(short))}</span>`)}</div>
-      <div class="card flush list">${rows.length ? rows.map((r) => `<div class="item"><div class="av ${r.difference < 0 ? 'red' : r.difference > 0 ? 'green' : 'gray'}">${initial(r.full_name)}</div>
-        <div class="m"><b>${dayLabel(r.day)}</b><span>جرده ${esc(r.full_name)} · المتوقع ${fmt(r.expected_cash)} · المعدود ${fmt(r.counted_cash)}${r.notes ? ` · ${esc(r.notes)}` : ''}</span></div>
-        <div class="e"><b class="num ${r.difference < 0 ? 'red' : r.difference > 0 ? 'green' : ''}">${r.difference > 0 ? '+' : ''}${fmt(r.difference)}</b><span class="chip ${r.difference ? (r.difference < 0 ? 'red' : 'green') : 'green'}">${r.difference === 0 ? 'مطابق' : r.difference < 0 ? 'نقص' : 'زيادة'}</span></div></div>`).join('') : '<div class="empty">لا توجد مطابقات صندوق بعد</div>'}</div>
-      <div class="foot-note">جرد الصندوق الرئيسي يتم من برنامج المكتب (صفحة الصندوق)</div>`;
+      <div class="kpis">${kpi('أيام الجرد (30 يوماً)', `<span class="num">${rows.length}</span>`)}${kpi('نقص الكاش', `<span class="${short ? 'red' : 'green'}">${money(Math.abs(short))}</span>`)}${kpi('فرق الكي كارد (نقص)', `<span class="${qiShort ? 'red' : 'green'}">${money(Math.abs(qiShort))}</span>`, '', 'wide')}</div>
+      <div class="card flush list">${rows.length ? rows.map((r) => {
+        const hasQi = r.counted_qi != null;
+        const qd = r.qi_difference || 0;
+        return `<div class="item"><div class="av ${bad(r) ? 'red' : (r.difference > 0 || qd > 0) ? 'green' : 'gray'}">${initial(r.full_name)}</div>
+        <div class="m"><b>${dayLabel(r.day)}</b><span>جرده ${esc(r.full_name)} · الكاش: المتوقع ${fmt(r.expected_cash)} · المعدود ${fmt(r.counted_cash)}${r.notes ? ` · ${esc(r.notes)}` : ''}</span>
+          <span>الكي كارد: المسجّل ${fmt(r.expected_qi)}${hasQi ? ` · الجهاز ${fmt(r.counted_qi)}${qd ? ` · <b class="${qd < 0 ? 'red' : 'green'}">${qd > 0 ? '+' : ''}${fmt(qd)}</b>` : ''}${r.qi_reason ? ` · ${esc(r.qi_reason)}` : ''}` : ' · لم يُطابق'}</span></div>
+        <div class="e"><b class="num ${r.difference < 0 ? 'red' : r.difference > 0 ? 'green' : ''}">${r.difference > 0 ? '+' : ''}${fmt(r.difference)}</b><span class="chip ${r.difference < 0 ? 'red' : 'green'}">كاش ${lab(r.difference, 'نقص', 'زيادة')}</span>${hasQi ? `<span class="chip ${qd < 0 ? 'red' : 'green'}">كي ${lab(qd, 'نقص', 'زيادة')}</span>` : ''}</div></div>`;
+      }).join('') : '<div class="empty">لا توجد مطابقات صندوق بعد</div>'}</div>
+      <div class="foot-note">جرد الصندوق (الكاش والكي كارد) يتم من برنامج المكتب — صفحة الصندوق</div>`;
   }
 
   function expenseSheet(id = null) {
@@ -908,11 +916,12 @@
       <div class="chips wrap">${cats.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
       <div class="field"><label>التاريخ</label><input class="input" type="date" name="date" value="${x?.expense_date || todayStr()}"></div>
       <div class="field"><label>ملاحظات</label><input class="input" name="notes" value="${esc(x?.notes || '')}"></div>
+      <div class="card flush"><label class="ntg"><span><b>دُفع من صندوق المكتب</b><small>فعّله إذا أُخذ المبلغ من صندوق المكتب — يُخصم عند الجرد</small></span><input type="checkbox" name="box" ${x?.from_box ? 'checked' : ''}><i></i></label></div>
       <button class="btn btn-gold btn-block" id="ok">حفظ</button>
       ${x ? `<button class="btn btn-danger btn-block" id="del">${icon('trash', 17)} حذف المصروف</button>` : ''}`, (sb) => {
       sb.querySelectorAll('[data-cat]').forEach((b) => { b.onclick = () => { sb.querySelector('[name="category"]').value = b.dataset.cat; sb.querySelectorAll('[data-cat]').forEach((y) => y.classList.toggle('on', y === b)); }; });
       sb.querySelector('#ok').onclick = () => {
-        const p = { category: val(sb, 'category'), amount: mval(sb, 'amount'), expense_date: val(sb, 'date'), notes: val(sb, 'notes') };
+        const p = { category: val(sb, 'category'), amount: mval(sb, 'amount'), expense_date: val(sb, 'date'), notes: val(sb, 'notes'), from_box: sb.querySelector('[name="box"]').checked };
         if (!p.category || !p.amount || !p.expense_date) return toast('أدخل المبلغ والبند والتاريخ', true);
         if (x) sendOp('expenses:update', { id: x.id, ...p }, `تعديل مصروف ${p.category} ${fmt(p.amount)}`);
         else sendOp('expenses:create', p, `مصروف ${p.category} ${fmt(p.amount)}`);
