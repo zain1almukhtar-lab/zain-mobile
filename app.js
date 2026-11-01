@@ -56,6 +56,7 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     chat: '<path d="M3 21l1.7-5A8.5 8.5 0 1 1 8 19.4z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1.3-1.3-2-1-1 .8a4 4 0 0 1-2.3-2.3l.8-1-1-2z"/>',
     phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
     plus: '<path d="M12 5v14M5 12h14"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="M20 6 9 17l-5-5"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -362,6 +363,7 @@
       <header class="top"><div class="top-row">
         <img src="${sn.office.logo ? esc(sn.office.logo) : 'icons/icon-192.png'}" alt="">
         <div class="t"><b>${esc(sn.office.name || 'مكتب زين المختار')}</b><span class="sync" id="sync"></span></div>
+        <button class="icon-btn press" id="nb" aria-label="الإشعارات">${icon('bell', 19)}</button>
         <button class="icon-btn press" id="rf" aria-label="تحديث">${icon('refresh', 19)}</button>
         <button class="icon-btn press" id="lo" aria-label="خروج">${icon('logout', 19)}</button>
       </div></header>
@@ -372,6 +374,7 @@
           : `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${icon(i, 23)}<span>${l}</span></button>`)).join('')}
       </div></nav>`;
     $app.querySelector('#rf').onclick = () => { refresh(); flushQueue(); };
+    $app.querySelector('#nb').onclick = () => notifSheet();
     $app.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; render(); } };
     $app.querySelectorAll('.tabs button').forEach((b) => {
       b.onclick = () => {
@@ -1073,6 +1076,68 @@
     });
   }
 
+  // ═════════════ إشعارات الهاتف (تصل حتى والتطبيق مغلق) ═════════════
+  // الحاسبة الرئيسية ترسل الإشعار مباشرة عبر خدمة إشعارات Apple عند كل فاتورة / مصروف / خصم / إلغاء…
+  const PUSH_DEFAULT = { inv: true, invMin: 0, disc: true, discMin: 0, exp: true, expMin: 0, danger: true, pay: false, cash: true, mine: false };
+  const pushPrefs = () => ({ ...PUSH_DEFAULT, ...(LS.get('zm-push-prefs') || {}) });
+  const keyBytes = (b64) => { const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+  async function currentSub() {
+    try { const r = await navigator.serviceWorker?.getRegistration(); return (await r?.pushManager?.getSubscription()) || null; } catch { return null; }
+  }
+  async function notifSheet() {
+    const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    const key = S.snap?.push?.key;
+    const sub = supported ? await currentSub() : null;
+    const onOffice = sub && (S.snap?.push?.devices || []).some((d) => sub.endpoint.endsWith(d.endpoint));
+    const pending = queue().some((o) => o.type === 'push:subscribe');
+    const P = pushPrefs();
+    const tg = (k, label, sub2 = '') => `<label class="ntg"><span><b>${label}</b>${sub2 ? `<small>${sub2}</small>` : ''}</span><input type="checkbox" data-k="${k}" ${P[k] ? 'checked' : ''}><i></i></label>`;
+    let warn = '';
+    if (!standalone) warn = 'لتصلك الإشعارات: افتح التطبيق من أيقونته على الشاشة الرئيسية (وليس من Safari). إذا لم تضفه بعد: زر المشاركة ← «إضافة إلى الشاشة الرئيسية».';
+    else if (!supported) warn = 'الإشعارات تحتاج iOS 16.4 أو أحدث — حدّث الآيفون من الإعدادات ← عام ← تحديث البرنامج.';
+    else if (!key) warn = 'حدّث برنامج المكتب على الحاسبة الرئيسية للنسخة الجديدة حتى تعمل الإشعارات.';
+    else if (Notification.permission === 'denied') warn = 'الإشعارات مرفوضة لهذا التطبيق — فعّلها من إعدادات الآيفون ← الإشعارات ← مكتب زين المختار.';
+    const status = warn ? `<div class="card" style="border-color:var(--amber);color:var(--amber);line-height:1.8;font-size:14px">${warn}</div>`
+      : `<div class="card" style="display:flex;gap:10px;align-items:center"><span class="av ${onOffice ? 'green' : pending ? 'amber' : 'gray'}">${icon(onOffice ? 'check' : 'bell', 18)}</span><div style="flex:1"><b>${onOffice ? 'الإشعارات مفعّلة على هذا الآيفون' : pending ? 'بانتظار تأكيد الحاسبة الرئيسية…' : sub ? 'غير مسجّل في المكتب بعد' : 'الإشعارات غير مفعّلة'}</b><div class="muted" style="font-size:12.5px;margin-top:2px">تصلك حتى والتطبيق مغلق، ما دامت الحاسبة الرئيسية شغالة ومتصلة بالإنترنت</div></div></div>`;
+    openSheet('الإشعارات', `${status}
+      <h2 class="sec" style="margin:4px 4px 0">ما الذي يصلك؟</h2>
+      <div class="card flush">
+        ${tg('inv', '🧾 الفواتير الجديدة')}
+        ${tg('disc', '🏷️ الخصومات')}
+        ${tg('exp', '💸 المصاريف')}
+        ${tg('danger', '⚠️ إلغاء أو حذف أو تعديل فاتورة', 'ومبالغ العملاء — مهم')}
+        ${tg('cash', '📦 نقص أو زيادة في جرد الصندوق')}
+        ${tg('pay', '💵 تسديد الديون والدفعات')}
+        ${tg('mine', 'عملياتي أنا أيضاً', 'عادةً تصلك عمليات الموظفين فقط')}
+      </div>
+      <h2 class="sec" style="margin:4px 4px 0">المهم فقط (اتركه فارغاً لاستلام الكل)</h2>
+      ${moneyField('invMin', 'الفواتير التي مبلغها أكثر من', P.invMin)}
+      ${moneyField('discMin', 'الخصومات الأكثر من', P.discMin)}
+      ${moneyField('expMin', 'المصاريف الأكثر من', P.expMin)}
+      <button class="btn btn-gold btn-block" id="on" ${warn ? 'disabled' : ''}>${icon('bell', 18)} ${onOffice ? 'حفظ الإعدادات' : 'تفعيل الإشعارات'}</button>
+      ${sub ? `<button class="btn btn-ghost btn-block" id="off">إيقاف الإشعارات على هذا الآيفون</button>` : ''}
+      <div class="foot-note">بعد التفعيل يصلك إشعار تجريبي خلال دقيقة تقريباً</div>`, (sb) => {
+      sb.querySelector('#on').onclick = async () => {
+        const prefs = { ...P };
+        sb.querySelectorAll('[data-k]').forEach((c) => { prefs[c.dataset.k] = c.checked; });
+        ['invMin', 'discMin', 'expMin'].forEach((k) => { prefs[k] = mval(sb, k) || 0; });
+        LS.set('zm-push-prefs', prefs);
+        try {
+          const perm = await Notification.requestPermission();
+          if (perm !== 'granted') return toast('لم تسمح بالإشعارات', true);
+          const reg = await navigator.serviceWorker.ready;
+          let s2 = await reg.pushManager.getSubscription();
+          if (!s2) s2 = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+          sendOp('push:subscribe', { sub: s2.toJSON(), prefs, device: 'آيفون', test: !onOffice }, onOffice ? 'تحديث إعدادات الإشعارات' : 'تفعيل الإشعارات');
+        } catch (e) { toast(`تعذّر التفعيل: ${e.message || e}`, true); }
+      };
+      sb.querySelector('#off')?.addEventListener('click', async () => {
+        try { const s2 = await currentSub(); if (s2) { const ep = s2.endpoint; await s2.unsubscribe(); sendOp('push:unsubscribe', { endpoint: ep }, 'إيقاف الإشعارات'); } } catch (e) { toast(String(e.message || e), true); }
+      });
+    });
+  }
+
   // ═════════════ زر الإضافة (+) ═════════════
   function addMenu() {
     const A = [
@@ -1121,6 +1186,7 @@
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     // عند رفع نسخة جديدة من التطبيق إلى GitHub: يُحمَّل التحديث في الخلفية ثم يُعاد فتح الصفحة مرة واحدة
     const had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.type === 'refresh' && S.snap) refresh(); });
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) location.reload(); });
     navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
   }

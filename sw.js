@@ -1,7 +1,7 @@
 // Service Worker: يجعل التطبيق يفتح بدون إنترنت.
 // الشبكة أولاً: عند وجود إنترنت تُجلب دائماً أحدث نسخة من GitHub (فتظهر التحديثات فوراً)،
 // وبدون إنترنت تُستخدم النسخة المحفوظة. البيانات المشفّرة لا تمر من هنا.
-const VERSION = 'zm-v5';
+const VERSION = 'zm-v6';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.json', 'vendor/bcrypt.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
@@ -30,4 +30,21 @@ self.addEventListener('fetch', (e) => {
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))),
   );
+});
+
+// ───── إشعارات المكتب (يرسلها الجهاز الرئيسي — تصل حتى والتطبيق مغلق) ─────
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'مكتب زين المختار', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'مكتب زين المختار', {
+    body: d.body || '', tag: d.tag || undefined, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: { at: d.at || Date.now() },
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const w = list.find((c) => 'focus' in c);
+    if (w) { w.postMessage({ type: 'refresh' }); return w.focus(); }
+    return self.clients.openWindow('./');
+  }));
 });

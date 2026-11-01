@@ -275,3 +275,12 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .aging .ag b { font-size: 16px; font-weight: 800; margin-top: 4px; display: block; color: var(--c); }
 .item.dg .m { text-align: right; background: none; border: 0; padding: 0; }
 .item.dg a.chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; }
+/* إعدادات الإشعارات */
+.ntg { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.ntg:last-child { border-bottom: 0; }
+.ntg span { flex: 1; } .ntg b { display: block; font-size: 15px; } .ntg small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ntg input { display: none; }
+.ntg i { width: 50px; height: 30px; border-radius: 99px; background: var(--card-3); position: relative; flex: none; transition: background .15s; }
+.ntg i::after { content: ''; position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: right .15s; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.ntg input:checked + i { background: var(--green); }
+.ntg input:checked + i::after { right: 23px; }
