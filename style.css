@@ -289,3 +289,4 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .line .qty { display: inline-flex; align-items: center; border: 1px solid rgba(212,175,55,.35); border-radius: 12px; height: 42px; flex: none; }
 .line .qty button { width: 30px; height: 100%; border: 0; background: transparent; color: #d4af37; font-size: 20px; font-weight: 800; font-family: inherit; }
 .line .qty b { min-width: 20px; text-align: center; font-size: 15px; }
+[hidden] { display: none !important; }

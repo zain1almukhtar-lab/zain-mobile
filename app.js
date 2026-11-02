@@ -48,6 +48,7 @@
     home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
     receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+    card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/>',
     wallet: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16" cy="14.5" r="1.3"/>',
     chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
@@ -624,7 +625,10 @@
       ${seg('kind', [['walk', 'زبون مباشر'], ['client', 'عميل مسجل']], st.kind)}
       <div id="party"></div>
       <div id="paybox"></div>
+      <div class="card flush"><label class="ntg"><span><b>💳 دفعت عنه بالكي كارد (يسلّمه كاش)</b><small>لا يُطبع في الفاتورة — يُضاف الكاش للصندوق</small></span><input type="checkbox" name="swapon"><i></i></label></div>
+      <div id="swapbox" hidden style="display:flex;flex-direction:column;gap:10px">${moneyField('swap', 'المبلغ المدفوع بالكي كارد', 0)}<input class="input" name="swapnote" placeholder="السبب (اختياري)"></div>
       <div class="total-bar"><span class="ink2">المجموع</span><b class="num" id="total">0</b></div>
+      <div class="total-bar" id="swaptot" hidden><span class="ink2">تستلم منه كاش بالمجموع</span><b class="num green" id="swapsum">0</b></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} إصدار الفاتورة</button>`, (sb) => {
       const total = () => st.lines.reduce((a, l) => a + (l.price || 0) * (l.qty || 1), 0);
       const paintLines = () => {
@@ -639,7 +643,16 @@
         sb.querySelectorAll('[data-rm]').forEach((el) => { el.onclick = () => { st.lines = st.lines.filter((l) => l.k !== Number(el.dataset.rm)); paintLines(); paintTotal(); }; });
         sb.querySelectorAll('[data-svc]').forEach((el) => el.classList.toggle('in', st.lines.some((l) => String(l.service_id) === el.dataset.svc)));
       };
-      const paintTotal = () => { sb.querySelector('#total').textContent = fmt(total()); paintPay(); };
+      const swapAmt = () => (sb.querySelector('[name="swapon"]').checked ? mval(sb, 'swap') : 0);
+      const paintSwap = () => {
+        const w = swapAmt(); const box = sb.querySelector('#swaptot'); box.hidden = !w;
+        const cashInv = st.pay === 'cash' || (st.pay === 'account' && (st.pmethod?.() || 'cash') === 'cash') ? (st.pay === 'account' ? mval(sb, 'paid') : total()) : 0;
+        sb.querySelector('#swapsum').textContent = fmt(cashInv + w);
+      };
+      const paintTotal = () => { sb.querySelector('#total').textContent = fmt(total()); paintPay(); paintSwap(); };
+      sb.querySelector('[name="swapon"]').onchange = (e) => { sb.querySelector('#swapbox').hidden = !e.target.checked; paintSwap(); };
+      sb.addEventListener('input', () => paintSwap());
+      sb.addEventListener('click', () => setTimeout(paintSwap, 0));
       const paintParty = () => {
         const p = sb.querySelector('#party');
         if (st.kind === 'walk') {
@@ -692,6 +705,7 @@
         if (!st.lines.length) return toast('أضف خدمة واحدة على الأقل', true);
         if (st.lines.some((l) => !l.price || !(l.name || '').trim())) return toast('أكمل اسم ومبلغ كل خدمة', true);
         if (st.kind === 'client' && !st.client) return toast('اختر العميل', true);
+        if (sb.querySelector('[name="swapon"]').checked && !mval(sb, 'swap')) return toast('أدخل مبلغ الكي كارد أو أطفئ الخيار', true);
         const t = total();
         const account = st.pay === 'account';
         const payload = {
@@ -703,6 +717,7 @@
           use_balance: !!st.client && (st.client.owed_to || 0) > 0 && st.useBal !== false,
           pay_rest: !account,
           company_name: val(sb, 'company') || null,
+          swap: swapAmt() > 0 ? { card_amount: swapAmt(), notes: val(sb, 'swapnote') || null } : null,
         };
         if (!st.client) { payload.customer_name = val(sb, 'cname') || null; payload.customer_phone = val(sb, 'phone') || null; }
         const who = st.client?.name || payload.company_name || payload.customer_name || 'زبون مباشر';
@@ -960,6 +975,32 @@
     });
   }
 
+  // ═════════════ دفع بالكي كارد عن زبون مقابل استلام كاش ═════════════
+  function swapSheet() {
+    openSheet('دفع بالكي كارد مقابل كاش', `
+      <div class="muted" style="font-size:13.5px;line-height:1.8">دفعت من حساب الكي كارد عن زبون، والزبون سلّمك المبلغ كاش. يُضاف الكاش لصندوق المكتب حتى يطابق الجرد.</div>
+      ${moneyField('card', 'المبلغ المدفوع بالكي كارد', 0, 'autofocus')}
+      <div class="card flush"><label class="ntg"><span><b>استلمت مبلغاً أكثر (عمولة)</b><small>الفرق يُسجّل مدخولاً للمكتب</small></span><input type="checkbox" name="fee"><i></i></label></div>
+      <div id="feebox" hidden>${moneyField('cash', 'الكاش المستلم من الزبون', 0)}</div>
+      <div class="field"><label>اسم الزبون / الشركة</label><input class="input" name="party"></div>
+      <div class="field"><label>السبب</label><input class="input" name="notes" placeholder="مثال: رسوم تسجيل"></div>
+      <div class="total-bar"><span class="ink2">يدخل الصندوق كاش</span><b class="num green" id="sw-total">0</b></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} تسجيل</button>`, (sb) => {
+      const fee = sb.querySelector('[name="fee"]');
+      const cashOf = () => (fee.checked ? mval(sb, 'cash') : mval(sb, 'card'));
+      const paint = () => { sb.querySelector('#sw-total').textContent = fmt(cashOf() || 0); };
+      fee.onchange = () => { sb.querySelector('#feebox').hidden = !fee.checked; paint(); };
+      sb.addEventListener('input', paint);
+      sb.querySelector('#ok').onclick = () => {
+        const card = mval(sb, 'card'); const cash = cashOf();
+        if (!card) return toast('أدخل المبلغ المدفوع بالكي كارد', true);
+        if (cash < card) return toast('الكاش المستلم أقل من المبلغ المدفوع', true);
+        const p = { card_amount: card, cash_amount: cash, party: val(sb, 'party'), notes: val(sb, 'notes'), day: todayStr() };
+        sendOp('cash:swap', p, `كي كارد مقابل كاش ${fmt(card)}${p.party ? ` — ${p.party}` : ''}`);
+      };
+    });
+  }
+
   // ═════════════ جدول الأعمال ═════════════
   // ───── سجل النشاط (كل التعديلات على النظام) ─────
   function auditRow(a) {
@@ -1164,12 +1205,13 @@
       ['ext', 'up', 'مدخول خارجي', 'دخلك الشخصي'],
       ['task', 'task', 'عمل / موعد', 'لليوم أو يوم آخر'],
       ['debt', 'cash', 'تسديد دين', 'دفعة من عميل'],
+      ['swap', 'card', 'كي كارد مقابل كاش', 'دفعت بالكارد واستلمت كاش'],
       ['client', 'userPlus', 'عميل جديد', 'للبيع على الحساب'],
     ];
     openSheet('إضافة', `<div class="actions">${A.map(([k, i, t, s]) => `<button class="action press" data-add="${k}"><span class="ic">${icon(i, 21)}</span><b>${t}</b><span>${s}</span></button>`).join('')}</div>`, (sb) => {
       sb.querySelectorAll('[data-add]').forEach((b) => {
         b.onclick = () => ({
-          inv: () => invoiceForm(), exp: () => expenseSheet(), ext: () => externalSheet(), task: () => taskSheet(), client: () => clientForm(),
+          inv: () => invoiceForm(), exp: () => expenseSheet(), swap: () => swapSheet(), ext: () => externalSheet(), task: () => taskSheet(), client: () => clientForm(),
           debt: () => { S.tab = 'clients'; closeSheet(true); render(); toast('اختر العميل ثم «دفعة»'); },
         })[b.dataset.add]();
       });
