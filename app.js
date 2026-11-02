@@ -573,7 +573,7 @@
         ${x.updated_at ? `<div class="kv"><span>آخر تعديل</span><b>${dayTime(x.updated_at)}</b></div>` : ''}
       </div>
       <div class="card">
-        ${(x.items || []).map((i) => `<div class="kv"><span style="color:var(--ink)">${esc(i.name)}</span><span>${i.original_price && i.price < i.original_price ? `<s class="muted num">${fmt(i.original_price)}</s> ` : ''}<b class="num">${fmt(i.price)}</b></span></div>`).join('')}
+        ${(x.items || []).map((i) => `<div class="kv"><span style="color:var(--ink)">${esc(i.name)}${(i.qty || 1) > 1 ? ` <span class="chip gray num">× ${i.qty}</span>` : ''}</span><span>${i.original_price && i.price < i.original_price ? `<s class="muted num">${fmt(i.original_price)}</s> ` : ''}<b class="num">${fmt(i.price)}</b></span></div>`).join('')}
         ${x.discount_total ? `<div class="kv"><span>الخصم</span><b class="amber num">-${fmt(x.discount_total)}</b></div>` : ''}
         <div class="kv"><span>المجموع</span><b class="gold num">${fmt(x.total_amount)}</b></div>
         <div class="kv"><span>المدفوع</span><b class="num">${fmt(x.paid_amount)}</b></div>
@@ -626,10 +626,14 @@
       <div id="paybox"></div>
       <div class="total-bar"><span class="ink2">المجموع</span><b class="num" id="total">0</b></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} إصدار الفاتورة</button>`, (sb) => {
-      const total = () => st.lines.reduce((a, l) => a + (l.price || 0), 0);
+      const total = () => st.lines.reduce((a, l) => a + (l.price || 0) * (l.qty || 1), 0);
       const paintLines = () => {
         sb.querySelector('#lines').innerHTML = st.lines.map((l) => `<div class="line">${l.custom ? `<input class="input n" style="height:42px;font-size:15px" data-name="${l.k}" placeholder="اسم الخدمة" value="${esc(l.name)}">` : `<div class="n">${esc(l.name)}</div>`}
+          <span class="qty"><button type="button" data-dec="${l.k}">−</button><b class="num">${l.qty || 1}</b><button type="button" data-inc="${l.k}">+</button></span>
           <input class="p" inputmode="numeric" data-price="${l.k}" value="${l.price ? fmt(l.price) : ''}" placeholder="0"><button class="x" data-rm="${l.k}">${icon('x', 15)}</button></div>`).join('');
+        const bump = (k, d) => { const l = st.lines.find((x) => x.k === k); l.qty = Math.max(1, Math.min(999, (l.qty || 1) + d)); paintLines(); paintTotal(); };
+        sb.querySelectorAll('[data-inc]').forEach((el) => { el.onclick = () => bump(Number(el.dataset.inc), 1); });
+        sb.querySelectorAll('[data-dec]').forEach((el) => { el.onclick = () => bump(Number(el.dataset.dec), -1); });
         sb.querySelectorAll('[data-price]').forEach((el) => { el.oninput = () => { const v = parseMoney(el.value); el.value = v ? fmt(v) : ''; st.lines.find((l) => l.k === Number(el.dataset.price)).price = v; paintTotal(); }; });
         sb.querySelectorAll('[data-name]').forEach((el) => { el.oninput = () => { st.lines.find((l) => l.k === Number(el.dataset.name)).name = el.value; }; });
         sb.querySelectorAll('[data-rm]').forEach((el) => { el.onclick = () => { st.lines = st.lines.filter((l) => l.k !== Number(el.dataset.rm)); paintLines(); paintTotal(); }; });
@@ -674,8 +678,13 @@
       };
       sb.querySelector('#svcs').addEventListener('click', (e) => {
         const b = e.target.closest('[data-svc]'); if (!b) return;
-        if (b.dataset.svc === 'custom') st.lines.push({ k: ++n, service_id: null, name: '', price: 0, custom: true });
-        else { const s = sn.services.find((x) => String(x.id) === b.dataset.svc); st.lines.push({ k: ++n, service_id: s.id, name: s.name, price: s.default_price }); }
+        if (b.dataset.svc === 'custom') st.lines.push({ k: ++n, service_id: null, name: '', price: 0, qty: 1, custom: true });
+        else {
+          const s = sn.services.find((x) => String(x.id) === b.dataset.svc);
+          const ex = st.lines.find((l) => l.service_id === s.id);
+          if (ex) ex.qty = Math.min(999, (ex.qty || 1) + 1); // الضغط مرة ثانية يزيد العدد
+          else st.lines.push({ k: ++n, service_id: s.id, name: s.name, price: s.default_price, qty: 1 });
+        }
         paintLines(); paintTotal();
       });
       bindSeg(sb, 'kind', (v) => { st.kind = v; if (v === 'walk') st.client = null; paintParty(); paintPay(); });
@@ -686,7 +695,7 @@
         const t = total();
         const account = st.pay === 'account';
         const payload = {
-          items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price })),
+          items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty || 1 })),
           client_id: st.client?.id || null,
           paid_amount: account ? Math.min(mval(sb, 'paid'), t) : t,
           method: account ? (st.pmethod?.() || 'cash') : st.pay,
