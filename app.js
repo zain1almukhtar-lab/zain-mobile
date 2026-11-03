@@ -48,6 +48,8 @@
     home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
     receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+    cog: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
     card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/>',
     wallet: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16" cy="14.5" r="1.3"/>',
     chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -364,9 +366,9 @@
       <header class="top"><div class="top-row">
         <img src="${sn.office.logo ? esc(sn.office.logo) : 'icons/icon-192.png'}" alt="">
         <div class="t"><b>${esc(sn.office.name || 'مكتب زين المختار')}</b><span class="sync" id="sync"></span></div>
+        <button class="icon-btn press" id="adm" aria-label="الإدارة">${icon('cog', 19)}</button>
         <button class="icon-btn press" id="nb" aria-label="الإشعارات">${icon('bell', 19)}</button>
         <button class="icon-btn press" id="rf" aria-label="تحديث">${icon('refresh', 19)}</button>
-        <button class="icon-btn press" id="lo" aria-label="خروج">${icon('logout', 19)}</button>
       </div></header>
       <main id="main"></main>
       <nav class="tabs"><div class="in">
@@ -376,7 +378,7 @@
       </div></nav>`;
     $app.querySelector('#rf').onclick = () => { refresh(); flushQueue(); };
     $app.querySelector('#nb').onclick = () => notifSheet();
-    $app.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; render(); } };
+    $app.querySelector('#adm').onclick = () => adminSheet();
     $app.querySelectorAll('.tabs button').forEach((b) => {
       b.onclick = () => {
         if (b.dataset.tab === 'add') return addMenu();
@@ -581,17 +583,161 @@
         ${rem > 0 && !x.is_void ? `<div class="kv"><span>المتبقي</span><b class="red num">${fmt(rem)}</b></div>` : ''}
         ${x.notes ? `<div class="kv"><span>ملاحظات</span><span>${esc(x.notes)}</span></div>` : ''}
       </div>
-      ${(x.payments || []).length ? `<h2 class="sec" style="margin:0 4px">تفاصيل التسديد</h2><div class="card flush">${x.payments.map((p) => `<div class="item noic"><div class="m"><b>${METHOD[p.method] || p.method} · ${({ initial: 'عند الإصدار', partial: 'دفعة', settlement: 'تسديد الدين', offset: 'من رصيده' })[p.kind] || ''}</b><span>${dayTime(p.created_at)} · استلمها ${esc(p.by_name)}</span></div><div class="e"><b class="green num">${fmt(p.amount)}</b></div></div>`).join('')}</div>` : '<div class="note">لم يُدفع أي مبلغ بعد (آجل)</div>'}
+      ${(x.payments || []).length ? `<h2 class="sec" style="margin:0 4px">تفاصيل التسديد</h2><div class="card flush">${x.payments.map((p) => `<div class="item noic"><div class="m"><b>${METHOD[p.method] || p.method} · ${({ initial: 'عند الإصدار', partial: 'دفعة', settlement: 'تسديد الدين', offset: 'من رصيده' })[p.kind] || ''}</b><span>${dayTime(p.created_at)} · استلمها ${esc(p.by_name)}</span></div><div class="e"><b class="green num">${fmt(p.amount)}</b>${!x.is_void && x.client_id && p.method !== 'balance' && p.id ? `<button class="chip amber" data-undo="${p.id}">${icon('undo', 12)} تراجع</button>` : ''}</div></div>`).join('')}</div>` : '<div class="note">لم يُدفع أي مبلغ بعد (آجل)</div>'}
       ${(() => { const h = (S.snap.audit || []).filter((a) => a.entity === 'sale' && a.entity_id === x.id); return h.length ? `<h2 class="sec" style="margin:0 4px">سجل الفاتورة</h2><div class="card flush">${h.map(auditRow).join('')}</div>` : ''; })()}
       ${x.is_void ? '<div class="alert">هذه الفاتورة ملغاة</div>' : `
       ${rem > 0 ? `<button class="btn btn-gold btn-block" id="pay">${icon('cash', 18)} تسجيل دفعة / تسديد</button>` : ''}
-      <button class="btn btn-danger btn-block" id="void">إلغاء الفاتورة</button>`}`, (sb) => {
+      ${x.is_swap ? '<div class="note">دين «كي كارد مقابل كاش» — يُسدَّد مثل أي دين، ولا يُحسب دخلاً</div>' : `<button class="btn btn-ghost btn-block" id="swp">${icon('card', 17)} كي كارد مقابل كاش لهذه الفاتورة</button>
+      <div class="grid2"><button class="btn btn-ghost btn-block" id="edit">${icon('edit', 17)} تعديل</button><button class="btn btn-ghost btn-block" id="void">إلغاء الفاتورة</button></div>`}`}
+      <button class="btn btn-danger btn-block" id="del">${icon('trash', 17)} حذف الفاتورة نهائياً</button>`, (sb) => {
       bindAudit(sb);
+      sb.querySelectorAll('[data-undo]').forEach((b) => {
+        b.onclick = () => {
+          const p = x.payments.find((y) => String(y.id) === b.dataset.undo);
+          const reason = prompt(`التراجع عن ${fmt(p.amount)} د.ع — يرجع ديناً على ${x.company_name || x.client_name}.\nاكتب السبب:`);
+          if (reason && reason.trim()) sendOp('payments:undo', { id: p.id, reason: reason.trim() }, `تراجع عن ${fmt(p.amount)} على ${x.receipt_no}`);
+        };
+      });
+      sb.querySelector('#edit')?.addEventListener('click', () => invoiceEditSheet(x));
+      sb.querySelector('#swp')?.addEventListener('click', () => swapSheet(x));
+      sb.querySelector('#del')?.addEventListener('click', () => {
+        const reason = prompt(`حذف الفاتورة ${x.receipt_no} نهائياً؟ اكتب السبب:`);
+        if (reason && reason.trim()) sendOp('sales:delete', { ids: [x.id], renumber: false, reason: reason.trim() }, `حذف ${x.receipt_no}`);
+      });
       sb.querySelector('#pay')?.addEventListener('click', () => paySheet(x, client));
       sb.querySelector('#void')?.addEventListener('click', () => {
         const reason = prompt('سبب إلغاء الفاتورة؟');
         if (reason && reason.trim()) sendOp('sales:void', { id: x.id, reason: reason.trim() }, `إلغاء ${x.receipt_no}`);
       });
+    });
+  }
+
+  // ═════════════ تعديل فاتورة صادرة (المدير) ═════════════
+  function invoiceEditSheet(x) {
+    const sn = S.snap;
+    let n = 0;
+    const st = { lines: (x.items || []).map((i) => { const q = i.qty || 1; return { k: ++n, id: i.id, service_id: i.service_id, name: i.name, price: Math.round(i.price / q), qty: q }; }) };
+    const walk = !x.client_id;
+    openSheet(`تعديل ${esc(x.receipt_no)}`, `
+      <div id="elines" style="display:flex;flex-direction:column;gap:8px"></div>
+      <select class="input" id="eadd"><option value="">+ إضافة خدمة…</option>${sn.services.map((v) => `<option value="${v.id}">${esc(v.name)}${v.default_price ? ` — ${fmt(v.default_price)}` : ''}</option>`).join('')}<option value="custom">خدمة أخرى</option></select>
+      ${walk ? `<input class="input" name="cname" placeholder="اسم الزبون" value="${esc(x.client_name === 'زبون مباشر' ? '' : x.client_name)}">` : ''}
+      <div class="grid2"><input class="input" name="company" placeholder="الشركة" value="${esc(x.company_name || '')}"><input class="input" name="phone" inputmode="tel" placeholder="الهاتف" value="${esc(x.client_phone || '')}"></div>
+      <input class="input" name="notes" placeholder="ملاحظات" value="${esc(x.notes || '')}">
+      <input class="input" name="reason" placeholder="سبب التعديل (اختياري)">
+      <div class="total-bar"><span class="ink2">المجموع الجديد</span><b class="num" id="etot">0</b></div>
+      <div id="epay"></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ التعديل</button>`, (sb) => {
+      const total = () => st.lines.reduce((a, l) => a + (l.price || 0) * (l.qty || 1), 0);
+      const paint = () => {
+        sb.querySelector('#elines').innerHTML = st.lines.map((l) => `<div class="line two">${l.service_id ? `<div class="n">${esc(l.name)}</div>` : `<input class="input n" style="height:42px;font-size:15px" data-name="${l.k}" placeholder="اسم الخدمة" value="${esc(l.name)}">`}
+          <span class="qty"><button type="button" data-dec="${l.k}">−</button><b class="num">${l.qty}</b><button type="button" data-inc="${l.k}">+</button></span>
+          <input class="p" inputmode="numeric" data-price="${l.k}" value="${l.price ? fmt(l.price) : ''}" placeholder="0"><button class="x" data-rm="${l.k}">${icon('x', 15)}</button></div>`).join('');
+        const L = (k) => st.lines.find((l) => l.k === Number(k));
+        sb.querySelectorAll('[data-price]').forEach((el) => { el.oninput = () => { const v = parseMoney(el.value); el.value = v ? fmt(v) : ''; L(el.dataset.price).price = v; paintT(); }; });
+        sb.querySelectorAll('[data-name]').forEach((el) => { el.oninput = () => { L(el.dataset.name).name = el.value; }; });
+        sb.querySelectorAll('[data-inc]').forEach((el) => { el.onclick = () => { const l = L(el.dataset.inc); l.qty = Math.min(999, l.qty + 1); paint(); }; });
+        sb.querySelectorAll('[data-dec]').forEach((el) => { el.onclick = () => { const l = L(el.dataset.dec); l.qty = Math.max(1, l.qty - 1); paint(); }; });
+        sb.querySelectorAll('[data-rm]').forEach((el) => { el.onclick = () => { if (st.lines.length > 1) { st.lines = st.lines.filter((l) => l.k !== Number(el.dataset.rm)); paint(); } }; });
+        paintT();
+      };
+      const paintT = () => {
+        const t = total(); sb.querySelector('#etot').textContent = fmt(t);
+        const extra = t - x.paid_amount;
+        const box = sb.querySelector('#epay');
+        if (walk && extra > 0) {
+          if (!box.dataset.on) { box.dataset.on = 1; box.innerHTML = `<div class="note">زبون مباشر: الفرق <b class="num" id="ediff"></b> يُدفع الآن</div>${seg('epm', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}`; st.pm = bindSeg(box, 'epm'); }
+          box.querySelector('#ediff').textContent = fmt(extra);
+        } else { box.dataset.on = ''; box.innerHTML = extra < 0 ? `<div class="note red">المجموع الجديد أقل من المدفوع (${fmt(x.paid_amount)})</div>` : ''; }
+      };
+      sb.querySelector('#eadd').onchange = (e) => {
+        const v = e.target.value; e.target.value = '';
+        if (v === 'custom') st.lines.push({ k: ++n, service_id: null, name: '', price: 0, qty: 1 });
+        else if (v) { const sv = sn.services.find((y) => String(y.id) === v); st.lines.push({ k: ++n, service_id: sv.id, name: sv.name, price: sv.default_price, qty: 1 }); }
+        paint();
+      };
+      paint();
+      sb.querySelector('#ok').onclick = () => {
+        if (st.lines.some((l) => !l.price || !(l.name || '').trim())) return toast('أكمل اسم ومبلغ كل خدمة', true);
+        const t = total();
+        if (t < x.paid_amount) return toast('المجموع أقل من المبلغ المدفوع', true);
+        const payload = {
+          id: x.id, items: st.lines.map((l) => ({ id: l.id, service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty })),
+          company_name: val(sb, 'company'), customer_phone: val(sb, 'phone'), notes: val(sb, 'notes'), reason: val(sb, 'reason') || null,
+        };
+        if (walk) payload.customer_name = val(sb, 'cname');
+        if (walk && t > x.paid_amount) payload.pay_now = { amount: t - x.paid_amount, method: st.pm?.() || 'cash' };
+        sendOp('sales:update', payload, `تعديل ${x.receipt_no} — ${fmt(t)}`);
+      };
+    });
+  }
+
+  // ═════════════ الإدارة من الآيفون: الموظفون والصلاحيات + الخدمات والأسعار ═════════════
+  function adminSheet() {
+    const sn = S.snap;
+    openSheet('الإدارة', `${!sn.staff ? '<div class="note">حدّث برنامج المكتب على الحاسبة الرئيسية حتى تظهر أدوات الإدارة</div>' : `<div class="actions">
+      <button class="action press" data-a="staff"><span class="ic">${icon('users', 21)}</span><b>الموظفون</b><span>${sn.staff.filter((u) => u.role !== 'admin').length} موظف · الصلاحيات والتفعيل</span></button>
+      <button class="action press" data-a="svc"><span class="ic">${icon('receipt', 21)}</span><b>الخدمات والأسعار</b><span>${(sn.servicesAll || []).length} خدمة</span></button>
+      <button class="action press" data-a="cash"><span class="ic">${icon('wallet', 21)}</span><b>الصندوق اليوم</b><span>الجرد والحركات مباشرة</span></button>
+      <button class="action press" data-a="log"><span class="ic">${icon('clock', 21)}</span><b>سجل النشاط</b><span>كل العمليات</span></button>
+    </div>`}
+    <button class="btn btn-ghost btn-block" id="lo">${icon('logout', 17)} تسجيل الخروج</button>`, (sb) => {
+      sb.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; closeSheet(true); render(); } };
+      sb.querySelectorAll('[data-a]').forEach((b) => {
+        b.onclick = () => ({ staff: staffSheet, svc: servicesSheet, cash: () => { closeSheet(true); S.tab = 'finance'; S.fin = 'cash'; render(); }, log: activitySheet })[b.dataset.a]();
+      });
+    });
+  }
+  function staffSheet() {
+    const list = S.snap.staff.filter((u) => u.role !== 'admin');
+    openSheet('الموظفون', `<div class="card flush list">${list.map((u) => `<button class="item" data-u="${u.id}"><div class="av ${u.is_active ? '' : 'gray'}">${initial(u.full_name)}</div>
+      <div class="m"><b>${esc(u.full_name)}</b><span>${u.is_active ? `${u.permissions.length} صلاحية${u.permissions.includes('cash.blind') ? ' · جرد أعمى' : u.permissions.includes('cash.close') ? ' · جرد اليوم' : ''}` : 'الحساب موقوف'}</span></div>
+      <div class="e">${u.is_active ? '<span class="chip green">فعّال</span>' : '<span class="chip red">موقوف</span>'}</div></button>`).join('') || '<div class="empty">لا يوجد موظفون</div>'}</div>
+      <div class="foot-note">إضافة موظف جديد أو تغيير كلمة المرور من برنامج المكتب</div>`, (sb) => {
+      sb.querySelectorAll('[data-u]').forEach((b) => { b.onclick = () => userSheet(Number(b.dataset.u)); });
+    });
+  }
+  function userSheet(id) {
+    const u = S.snap.staff.find((x) => x.id === id);
+    const cat = S.snap.permsCatalog || [];
+    const groups = [...new Set(cat.map((p) => p.group))];
+    openSheet(esc(u.full_name), `
+      <div class="card flush"><label class="ntg"><span><b>الحساب فعّال</b><small>إذا أوقفته لا يكدر يدخل للبرنامج</small></span><input type="checkbox" name="active" ${u.is_active ? 'checked' : ''}><i></i></label></div>
+      ${groups.map((g) => `<h2 class="sec" style="margin:4px 4px 0">${esc(g)}</h2><div class="card flush">${cat.filter((p) => p.group === g).map((p) => `<label class="ntg"><span><b style="font-size:14px;font-weight:600">${esc(p.label)}</b></span><input type="checkbox" data-p="${p.key}" ${u.permissions.includes(p.key) ? 'checked' : ''}><i></i></label>`).join('')}</div>`).join('')}
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ</button>`, (sb) => {
+      sb.querySelector('#ok').onclick = () => {
+        const perms = [...sb.querySelectorAll('[data-p]')].filter((c) => c.checked).map((c) => c.dataset.p);
+        const active = sb.querySelector('[name="active"]').checked;
+        const changedPerms = perms.slice().sort().join() !== u.permissions.slice().sort().join();
+        if (changedPerms) sendOp('users:update', { id: u.id, full_name: u.full_name, username: u.username, role: u.role, permissions: perms }, `صلاحيات ${u.full_name}`);
+        if (!!active !== !!u.is_active) sendOp('users:setActive', { id: u.id, active }, `${active ? 'تفعيل' : 'إيقاف'} ${u.full_name}`);
+        if (!changedPerms && !!active === !!u.is_active) closeSheet();
+      };
+    });
+  }
+  function servicesSheet() {
+    const list = S.snap.servicesAll || [];
+    openSheet('الخدمات والأسعار', `<button class="btn btn-gold btn-block" id="new">${icon('plus', 18)} خدمة جديدة</button>
+      <div class="card flush list">${list.map((v) => `<button class="item noic" data-s="${v.id}"><div class="m"><b>${esc(v.name)}</b><span>${esc(v.category || '')}</span></div>
+      <div class="e"><b class="num ${v.is_active ? '' : 'muted'}">${v.default_price ? fmt(v.default_price) : 'حسب الطلب'}</b>${v.is_active ? '' : '<span class="chip red">موقوفة</span>'}</div></button>`).join('')}</div>`, (sb) => {
+      sb.querySelector('#new').onclick = () => serviceSheet(null);
+      sb.querySelectorAll('[data-s]').forEach((b) => { b.onclick = () => serviceSheet(Number(b.dataset.s)); });
+    });
+  }
+  function serviceSheet(id) {
+    const v = id ? S.snap.servicesAll.find((x) => x.id === id) : null;
+    const cats = [...new Set((S.snap.servicesAll || []).map((x) => x.category).filter(Boolean))];
+    openSheet(v ? 'تعديل خدمة' : 'خدمة جديدة', `
+      <div class="field"><label>اسم الخدمة</label><input class="input" name="name" value="${esc(v?.name || '')}"></div>
+      ${moneyField('price', 'السعر (اتركه 0 إذا حسب الطلب)', v?.default_price || 0)}
+      <div class="field"><label>القسم</label><input class="input" name="cat" list="svccats" value="${esc(v?.category || '')}"><datalist id="svccats">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ</button>
+      ${v ? `<button class="btn btn-ghost btn-block" id="tg">${v.is_active ? 'إيقاف الخدمة' : 'تفعيل الخدمة'}</button>` : ''}`, (sb) => {
+      sb.querySelector('#ok').onclick = () => {
+        const name = val(sb, 'name'); if (!name) return toast('اكتب اسم الخدمة', true);
+        sendOp('services:save', { id: v?.id, name, default_price: mval(sb, 'price') || 0, icon: v?.icon || 'file', category: val(sb, 'cat') || 'أخرى' }, `${v ? 'تعديل' : 'إضافة'} خدمة ${name}`);
+      };
+      sb.querySelector('#tg')?.addEventListener('click', () => sendOp('services:toggle', { id: v.id }, `${v.is_active ? 'إيقاف' : 'تفعيل'} ${v.name}`));
     });
   }
 
@@ -626,13 +772,13 @@
       <div id="party"></div>
       <div id="paybox"></div>
       <div class="card flush"><label class="ntg"><span><b>💳 دفعت عنه بالكي كارد (يسلّمه كاش)</b><small>لا يُطبع في الفاتورة — يُضاف الكاش للصندوق</small></span><input type="checkbox" name="swapon"><i></i></label></div>
-      <div id="swapbox" hidden style="display:flex;flex-direction:column;gap:10px">${moneyField('swap', 'المبلغ المدفوع بالكي كارد', 0)}<input class="input" name="swapnote" placeholder="السبب (اختياري)"></div>
+      <div id="swapbox" hidden><div style="display:flex;flex-direction:column;gap:10px"><div class="grid2">${moneyField('swap', 'دفعت بالكي كارد', 0)}${moneyField('swapcash', 'استلمت كاش', 0)}</div><div id="swapmsg"></div><input class="input" name="swapnote" placeholder="السبب (اختياري)"></div></div>
       <div class="total-bar"><span class="ink2">المجموع</span><b class="num" id="total">0</b></div>
       <div class="total-bar" id="swaptot" hidden><span class="ink2">تستلم منه كاش بالمجموع</span><b class="num green" id="swapsum">0</b></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} إصدار الفاتورة</button>`, (sb) => {
       const total = () => st.lines.reduce((a, l) => a + (l.price || 0) * (l.qty || 1), 0);
       const paintLines = () => {
-        sb.querySelector('#lines').innerHTML = st.lines.map((l) => `<div class="line">${l.custom ? `<input class="input n" style="height:42px;font-size:15px" data-name="${l.k}" placeholder="اسم الخدمة" value="${esc(l.name)}">` : `<div class="n">${esc(l.name)}</div>`}
+        sb.querySelector('#lines').innerHTML = st.lines.map((l) => `<div class="line two">${l.custom ? `<input class="input n" style="height:42px;font-size:15px" data-name="${l.k}" placeholder="اسم الخدمة" value="${esc(l.name)}">` : `<div class="n">${esc(l.name)}</div>`}
           <span class="qty"><button type="button" data-dec="${l.k}">−</button><b class="num">${l.qty || 1}</b><button type="button" data-inc="${l.k}">+</button></span>
           <input class="p" inputmode="numeric" data-price="${l.k}" value="${l.price ? fmt(l.price) : ''}" placeholder="0"><button class="x" data-rm="${l.k}">${icon('x', 15)}</button></div>`).join('');
         const bump = (k, d) => { const l = st.lines.find((x) => x.k === k); l.qty = Math.max(1, Math.min(999, (l.qty || 1) + d)); paintLines(); paintTotal(); };
@@ -644,8 +790,17 @@
         sb.querySelectorAll('[data-svc]').forEach((el) => el.classList.toggle('in', st.lines.some((l) => String(l.service_id) === el.dataset.svc)));
       };
       const swapAmt = () => (sb.querySelector('[name="swapon"]').checked ? mval(sb, 'swap') : 0);
+      // الكاش المستلم مقابل الكي كارد: افتراضياً نفس المبلغ إلى أن يغيّره المستخدم
+      let swapCashTouched = false;
+      sb.querySelector('[name="swapcash"]').addEventListener('input', () => { swapCashTouched = true; });
+      sb.querySelector('[name="swap"]').addEventListener('input', () => { if (!swapCashTouched) { const el = sb.querySelector('[name="swapcash"]'); const v = mval(sb, 'swap'); el.value = v ? fmt(v) : ''; } });
+      const swapGot = () => (swapAmt() ? (swapCashTouched ? mval(sb, 'swapcash') : swapAmt()) : 0);
       const paintSwap = () => {
-        const w = swapAmt(); const box = sb.querySelector('#swaptot'); box.hidden = !w;
+        const short = swapAmt() - swapGot();
+        const msg = sb.querySelector('#swapmsg');
+        msg.innerHTML = short > 0 ? `<div class="note ${st.client ? 'amber' : 'red'}">${st.client ? `الباقي <b class="num">${fmt(short)}</b> يُسجَّل ديناً على ${esc(st.client.name)}` : 'سلّم أقل؟ اختر «عميل مسجل» حتى يُسجَّل الباقي ديناً'}</div>` : short < 0 ? `<div class="note green">العمولة <b class="num">${fmt(-short)}</b> تُسجّل مدخولاً للمكتب</div>` : '';
+        sb.querySelector('#ok').innerHTML = `${icon('check', 18)} ${!st.lines.length && swapAmt() ? 'تسجيل كي كارد مقابل كاش (بدون فاتورة)' : 'إصدار الفاتورة'}`;
+        const w = swapGot(); const box = sb.querySelector('#swaptot'); box.hidden = !swapAmt();
         const cashInv = st.pay === 'cash' || (st.pay === 'account' && (st.pmethod?.() || 'cash') === 'cash') ? (st.pay === 'account' ? mval(sb, 'paid') : total()) : 0;
         sb.querySelector('#swapsum').textContent = fmt(cashInv + w);
       };
@@ -702,7 +857,9 @@
       });
       bindSeg(sb, 'kind', (v) => { st.kind = v; if (v === 'walk') st.client = null; paintParty(); paintPay(); });
       sb.querySelector('#ok').onclick = () => {
-        if (!st.lines.length) return toast('أضف خدمة واحدة على الأقل', true);
+        const swapOnly = !st.lines.length && swapAmt() > 0;
+        if (!st.lines.length && !swapOnly) return toast('أضف خدمة واحدة على الأقل', true);
+        if (swapAmt() - swapGot() > 0 && !st.client) return toast('اختر العميل حتى يُسجَّل الباقي ديناً عليه', true);
         if (st.lines.some((l) => !l.price || !(l.name || '').trim())) return toast('أكمل اسم ومبلغ كل خدمة', true);
         if (st.kind === 'client' && !st.client) return toast('اختر العميل', true);
         if (sb.querySelector('[name="swapon"]').checked && !mval(sb, 'swap')) return toast('أدخل مبلغ الكي كارد أو أطفئ الخيار', true);
@@ -717,11 +874,11 @@
           use_balance: !!st.client && (st.client.owed_to || 0) > 0 && st.useBal !== false,
           pay_rest: !account,
           company_name: val(sb, 'company') || null,
-          swap: swapAmt() > 0 ? { card_amount: swapAmt(), notes: val(sb, 'swapnote') || null } : null,
+          swap: swapAmt() > 0 ? { card_amount: swapAmt(), cash_amount: swapGot(), notes: val(sb, 'swapnote') || null, day: todayStr() } : null,
         };
         if (!st.client) { payload.customer_name = val(sb, 'cname') || null; payload.customer_phone = val(sb, 'phone') || null; }
         const who = st.client?.name || payload.company_name || payload.customer_name || 'زبون مباشر';
-        sendOp('sales:create', payload, `فاتورة ${fmt(t)} — ${who}`);
+        sendOp('sales:create', payload, swapOnly ? `كي كارد مقابل كاش ${fmt(swapAmt())} — ${who}` : `فاتورة ${fmt(t)} — ${who}`);
       };
       paintParty(); paintPay();
     });
@@ -918,7 +1075,20 @@
     const qiShort = rows.filter((r) => r.qi_difference < 0).reduce((a, r) => a + r.qi_difference, 0);
     const bad = (r) => r.difference < 0 || r.qi_difference < 0;
     const lab = (v, lo, hi) => (v === 0 ? 'مطابق' : v < 0 ? lo : hi);
-    return `
+    const c = S.snap.cashToday;
+    const today = c ? `<h2 class="sec">الصندوق اليوم</h2>
+      <div class="kpis">${kpi('المفروض بالصندوق', `<span class="gold">${money(c.expected)}</span>`, `كاش ${fmt(c.cashIn + (c.swapIn || 0))} − مصاريف ${fmt(c.spendOut)} − لعملاء ${fmt(c.cashOut)}`, 'wide')}${kpi('كي كارد اليوم', money(c.qiIn), `${c.moves} حركة`)}${kpi('الجرد', c.closing ? (c.closing.difference || c.closing.qi_difference ? '<span class="red">بيه فرق</span>' : '<span class="green">مطابق</span>') : '<span class="muted">لم يُجرد</span>', c.closing ? `${esc(c.closing.closed_by_name)} · ${c.closing.difference ? `كاش ${c.closing.difference > 0 ? '+' : ''}${fmt(c.closing.difference)}` : 'كاش مطابق'}` : '')}</div>
+      ${c.closing && (c.closing.reason || c.closing.qi_reason) ? `<div class="note">السبب: ${esc([c.closing.reason, c.closing.qi_reason].filter(Boolean).join(' / '))}</div>` : ''}
+      ${(c.employees || []).length ? `<div class="card flush list">${c.employees.map((e) => `<div class="item noic"><div class="m"><b>${esc(e.full_name)}</b><span>${e.count} فاتورة · كاش ${fmt(e.cash)} · كي كارد ${fmt(e.qi)}</span></div><div class="e"><b class="num">${fmt(e.total)}</b></div></div>`).join('')}</div>` : ''}
+      ${(c.spends || []).length || (c.swaps || []).length ? `<div class="card flush list">${(c.spends || []).map((e) => `<div class="item noic"><div class="m"><b>مصروف: ${esc(e.category)}</b><span>${esc(e.by_name)}${e.notes ? ` · ${esc(e.notes)}` : ''}</span></div><div class="e"><b class="red num">−${fmt(e.amount)}</b><button class="chip red" data-spdel="${e.id}">${icon('trash', 12)}</button></div></div>`).join('')}
+        ${(c.swaps || []).map((w) => `<div class="item noic"><div class="m"><b>كي كارد مقابل كاش${w.party ? ` · ${esc(w.party)}` : ''}</b><span>${esc(w.by_name)}${w.receipt_no ? ` · مع ${esc(w.receipt_no)}` : ''}${w.notes ? ` · ${esc(w.notes)}` : ''}</span></div><div class="e"><b class="green num">+${fmt(w.cash_amount)}</b><button class="chip red" data-swdel="${w.id}">${icon('trash', 12)}</button></div></div>`).join('')}</div>` : ''}
+      <h2 class="sec">سجل الجرد</h2>` : '';
+    setTimeout(() => {
+      const m = $app.querySelector('#main'); if (!m) return;
+      m.querySelectorAll('[data-spdel]').forEach((b) => { b.onclick = () => { if (confirm('حذف هذا المصروف من الصندوق؟')) sendOp('cash:spendDelete', { id: Number(b.dataset.spdel) }, 'حذف مصروف من الصندوق'); }; });
+      m.querySelectorAll('[data-swdel]').forEach((b) => { b.onclick = () => { if (confirm('حذف عملية الكي كارد مقابل كاش؟')) sendOp('cash:swapDelete', { id: Number(b.dataset.swdel) }, 'حذف كي كارد مقابل كاش'); }; });
+    });
+    return `${today}
       <div class="kpis">${kpi('أيام الجرد (30 يوماً)', `<span class="num">${rows.length}</span>`)}${kpi('نقص الكاش', `<span class="${short ? 'red' : 'green'}">${money(Math.abs(short))}</span>`)}${kpi('فرق الكي كارد (نقص)', `<span class="${qiShort ? 'red' : 'green'}">${money(Math.abs(qiShort))}</span>`, '', 'wide')}</div>
       <div class="card flush list">${rows.length ? rows.map((r) => {
         const hasQi = r.counted_qi != null;
@@ -976,30 +1146,42 @@
   }
 
   // ═════════════ دفع بالكي كارد عن زبون مقابل استلام كاش ═════════════
-  function swapSheet() {
-    openSheet('دفع بالكي كارد مقابل كاش', `
-      <div class="muted" style="font-size:13.5px;line-height:1.8">دفعت من حساب الكي كارد عن زبون، والزبون سلّمك المبلغ كاش. يُضاف الكاش لصندوق المكتب حتى يطابق الجرد.</div>
-      ${moneyField('card', 'المبلغ المدفوع بالكي كارد', 0, 'autofocus')}
-      <div class="card flush"><label class="ntg"><span><b>استلمت مبلغاً أكثر (عمولة)</b><small>الفرق يُسجّل مدخولاً للمكتب</small></span><input type="checkbox" name="fee"><i></i></label></div>
-      <div id="feebox" hidden>${moneyField('cash', 'الكاش المستلم من الزبون', 0)}</div>
-      <div class="field"><label>اسم الزبون / الشركة</label><input class="input" name="party"></div>
+  function swapSheet(sale = null) {
+    const sn = S.snap;
+    const clients = (sn.clients || []);
+    openSheet(sale ? `كي كارد مقابل كاش — ${esc(sale.receipt_no)}` : 'دفع بالكي كارد مقابل كاش', `
+      <div class="muted" style="font-size:13.5px;line-height:1.8">دفعت من حساب الكي كارد عن الزبون، وهو يسلّمك كاش. الكاش يدخل الصندوق، وإذا سلّم أقل يبقى الباقي ديناً عليه.</div>
+      ${sale ? `<div class="card"><div class="kv"><span>الفاتورة</span><b>${esc(sale.receipt_no)} · ${esc(sale.company_name || sale.client_name)}</b></div></div>` : `<div class="field"><label>العميل (مطلوب إذا يبقى عليه دين)</label><select class="input" name="client"><option value="">زبون مباشر / بدون عميل</option>${clients.map((c) => `<option value="${c.id}">${esc(c.name)}${c.company ? ` — ${esc(c.company)}` : ''}</option>`).join('')}</select></div>
+      <div class="field" id="partyf"><label>اسم الزبون / الشركة</label><input class="input" name="party"></div>`}
+      <div class="grid2">${moneyField('card', 'دفعت بالكي كارد', 0, 'autofocus')}${moneyField('cash', 'استلمت كاش', 0)}</div>
+      <div id="swmsg"></div>
       <div class="field"><label>السبب</label><input class="input" name="notes" placeholder="مثال: رسوم تسجيل"></div>
       <div class="total-bar"><span class="ink2">يدخل الصندوق كاش</span><b class="num green" id="sw-total">0</b></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} تسجيل</button>`, (sb) => {
-      const fee = sb.querySelector('[name="fee"]');
-      const cashOf = () => (fee.checked ? mval(sb, 'cash') : mval(sb, 'card'));
-      const paint = () => { sb.querySelector('#sw-total').textContent = fmt(cashOf() || 0); };
-      fee.onchange = () => { sb.querySelector('#feebox').hidden = !fee.checked; paint(); };
-      sb.addEventListener('input', paint);
+      let touched = false;
+      const cid = () => (sale ? sale.client_id : Number(val(sb, 'client')) || null);
+      sb.querySelector('[name="cash"]').addEventListener('input', () => { touched = true; });
+      const cashOf = () => (touched ? mval(sb, 'cash') : mval(sb, 'card'));
+      const paint = () => {
+        if (!touched) { const v = mval(sb, 'card'); sb.querySelector('[name="cash"]').value = v ? fmt(v) : ''; }
+        const short = mval(sb, 'card') - cashOf();
+        sb.querySelector('#sw-total').textContent = fmt(cashOf() || 0);
+        sb.querySelector('#swmsg').innerHTML = short > 0 ? `<div class="note ${cid() ? 'amber' : 'red'}">${cid() ? `الباقي <b class="num">${fmt(short)}</b> يُسجَّل ديناً على العميل` : 'سلّم أقل؟ اختر العميل حتى يُسجَّل الباقي ديناً'}</div>` : short < 0 ? `<div class="note green">العمولة <b class="num">${fmt(-short)}</b> تُسجّل مدخولاً للمكتب</div>` : '';
+        const pf = sb.querySelector('#partyf'); if (pf) pf.hidden = !!cid();
+      };
+      sb.addEventListener('input', paint); sb.addEventListener('change', paint);
       sb.querySelector('#ok').onclick = () => {
         const card = mval(sb, 'card'); const cash = cashOf();
         if (!card) return toast('أدخل المبلغ المدفوع بالكي كارد', true);
-        if (cash < card) return toast('الكاش المستلم أقل من المبلغ المدفوع', true);
-        const p = { card_amount: card, cash_amount: cash, party: val(sb, 'party'), notes: val(sb, 'notes'), day: todayStr() };
-        sendOp('cash:swap', p, `كي كارد مقابل كاش ${fmt(card)}${p.party ? ` — ${p.party}` : ''}`);
+        if (cash < card && !cid()) return toast('اختر العميل حتى يُسجَّل الباقي ديناً عليه', true);
+        const p = { card_amount: card, cash_amount: cash, notes: val(sb, 'notes'), day: todayStr() };
+        if (sale) p.sale_id = sale.id; else if (cid()) p.client_id = cid(); else p.party = val(sb, 'party');
+        const who = sale ? sale.receipt_no : (clients.find((c) => c.id === cid())?.name || p.party || '');
+        sendOp('cash:swap', p, `كي كارد مقابل كاش ${fmt(card)}${who ? ` — ${who}` : ''}${cash < card ? ` (دين ${fmt(card - cash)})` : ''}`);
       };
     });
   }
+
 
   // ═════════════ جدول الأعمال ═════════════
   // ───── سجل النشاط (كل التعديلات على النظام) ─────
