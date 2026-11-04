@@ -138,7 +138,7 @@
   // ═════════════ الحالة ═════════════
   const S = {
     snap: null, offline: false, loading: false, error: null, user: null,
-    tab: 'home', fin: 'expenses', month: null, expMonth: null, year: null,
+    tab: 'home', fin: 'days', month: null, expMonth: null, year: null,
     invDay: null, q: '', cq: '',
   };
 
@@ -409,6 +409,7 @@
     if (cq) cq.oninput = () => { S.cq = cq.value; main.querySelector('#clist').innerHTML = clientList(); bindRows(main); };
     bindRows(main);
     bindAudit(main);
+    main.querySelectorAll('[data-day]').forEach((el) => { el.onclick = () => daySheet(el.dataset.day); });
   }
   function bindRows(root) {
     root.querySelectorAll('[data-open]').forEach((el) => {
@@ -425,6 +426,7 @@
     const step = (list, cur, d) => list[Math.min(list.length - 1, Math.max(0, list.indexOf(cur) + d))];
     if (a === 'month') S.month = step(months, S.month, Number(v));
     else if (a === 'expMonth') S.expMonth = step(months, S.expMonth, Number(v));
+    else if (a === 'dMonth') S.dMonth = step(months, S.dMonth, Number(v));
     else if (a === 'year') S.year = step(years, S.year, Number(v));
     else if (a === 'day') S.invDay = v || null;
     else if (a === 'fin') S.fin = v;
@@ -507,7 +509,7 @@
         <div class="s"><span>${e.today.count} فاتورة</span><span>كاش ${fmt(e.today.cash)}</span><span>كي ${fmt(e.today.qi)}</span>${e.today.due ? `<span class="red">آجل ${fmt(e.today.due)}</span>` : ''}</div></div>`).join('') : '<div class="empty">لا مبيعات اليوم بعد</div>'}</div>` : ''}
 
       <h2 class="sec">الدخل اليومي</h2>
-      <div class="card">${(d.daily || []).length ? `<div class="chart">${d.daily.map((x) => `<div class="c ${x.day === todayStr() ? 'today' : ''}"><i style="height:${((x.cash + x.qi_card + (x.balance || 0)) / maxDay) * 100}%"></i><span>${Number(x.day.slice(8))}</span></div>`).join('')}</div>` : '<div class="empty">لا يوجد دخل في هذا الشهر</div>'}</div>
+      <div class="card">${(d.daily || []).length ? `<div class="chart">${d.daily.map((x) => `<div class="c ${x.day === todayStr() ? 'today' : ''}" data-day="${x.day}"><i style="height:${((x.cash + x.qi_card + (x.balance || 0)) / maxDay) * 100}%"></i><span>${Number(x.day.slice(8))}</span></div>`).join('')}</div>` : '<div class="empty">لا يوجد دخل في هذا الشهر</div>'}</div>
       ${d.byService.length ? `<h2 class="sec">أكثر الخدمات مبيعاً</h2><div class="card">${bars(d.byService, 'name', 'total')}</div>` : ''}
       ${d.discounts.length ? `<h2 class="sec">الخصومات</h2><div class="card flush">${d.discounts.slice(0, 15).map((x) => `<div class="item"><div class="av amber">٪</div><div class="m"><b>${esc(x.client_name)}</b><span>${esc(x.receipt_no)} · بواسطة ${esc(x.by_name)}</span></div><div class="e"><b class="amber num">-${fmt(x.discount_total)}</b></div></div>`).join('')}</div>` : ''}
       <div class="foot-note">آخر مزامنة ${new Date(sn.at).toLocaleString('ar-IQ-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' })}</div>`;
@@ -551,7 +553,7 @@
     const days = [...new Set(S.snap.invoices.map((x) => x.created_at.slice(0, 10)))].slice(0, 30);
     const list = S.invDay ? S.snap.invoices.filter((x) => x.created_at.slice(0, 10) === S.invDay && !x.is_void) : null;
     return `
-      ${title('الفواتير', 'آخر 90 يوماً', `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>`)}
+      ${title('الفواتير', (S.snap.invoiceDays || 90) > 300 ? 'آخر سنة' : 'آخر 90 يوماً', `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>`)}
       <div class="search">${icon('search', 18)}<input class="input" id="q" type="search" placeholder="الشركة، العميل، الخدمة، رقم الفاتورة" value="${esc(S.q)}"></div>
       <div class="chips">
         <button class="${S.invDay ? '' : 'on'}" data-act="day" data-v="">الكل</button>
@@ -1029,11 +1031,63 @@
 
   // ═════════════ المالية ═════════════
   function tabFinance() {
-    const tabsHtml = seg('fin', [['expenses', 'المصاريف'], ['external', 'الخارجي'], ['year', 'السنوي'], ['cash', 'الصندوق']], S.fin);
-    const body = ({ expenses: finExpenses, external: finExternal, year: finYear, cash: finCash })[S.fin]();
+    const tabsHtml = seg('fin', [['days', 'اليومي'], ['expenses', 'المصاريف'], ['external', 'الخارجي'], ['year', 'السنوي'], ['cash', 'الصندوق']], S.fin);
+    const body = ({ days: finDays, expenses: finExpenses, external: finExternal, year: finYear, cash: finCash })[S.fin]();
     setTimeout(() => bindSeg($app.querySelector('#main'), 'fin', (v) => { S.fin = v; paintMain(); }));
     return `${title('المالية', 'خاص بالمدير')}${statusBars()}${tabsHtml}${body}`;
   }
+  // ═════════════ الدخل اليومي: كل يوم بالتفصيل (كاش / كي كارد) لأي شهر ═════════════
+  function dayIncome(day) {
+    const d = S.snap.months[day.slice(0, 7)];
+    const r = (d?.daily || []).find((x) => x.day === day) || { cash: 0, qi_card: 0, balance: 0 };
+    return { ...r, total: r.cash + r.qi_card + (r.balance || 0) };
+  }
+  function finDays() {
+    const sn = S.snap;
+    const months = Object.keys(sn.months).sort();
+    if (!S.dMonth || !sn.months[S.dMonth]) S.dMonth = months[months.length - 1];
+    const d = sn.months[S.dMonth];
+    const [y, m] = S.dMonth.split('-').map(Number);
+    const last = S.dMonth === todayStr().slice(0, 7) ? Number(todayStr().slice(8)) : new Date(y, m, 0).getDate();
+    const rows = Array.from({ length: last }, (_, i) => `${S.dMonth}-${String(last - i).padStart(2, '0')}`).map((day) => ({ day, ...dayIncome(day) }));
+    const max = Math.max(1, ...rows.map((r) => r.total));
+    const inv = (day) => sn.invoices.filter((x) => !x.is_void && !x.is_swap && x.created_at.slice(0, 10) === day).length;
+    const withData = rows.filter((r) => r.total);
+    const best = withData.length ? withData.reduce((a, r) => (r.total > a.total ? r : a)) : null;
+    return `
+      ${picker('dMonth', monthName(S.dMonth), months, S.dMonth)}
+      <div class="kpis">${kpi('دخل الشهر', `<span class="gold">${money(d.monthIncome.total)}</span>`, `${withData.length} يوم فيه دخل · المعدل ${fmt(withData.length ? Math.round(d.monthIncome.total / withData.length) : 0)} باليوم`, 'wide')}${kpi('كاش', money(d.monthIncome.cash), '', '', 'var(--green)')}${kpi('كي كارد', money(d.monthIncome.qi_card), '', '', 'var(--blue)')}
+        ${best ? kpi('أعلى يوم', money(best.total), dayLabel(best.day), 'wide') : ''}</div>
+      <div class="card flush list days">${rows.map((r) => {
+        const n = inv(r.day);
+        return `<button class="item noic day-row ${r.total ? '' : 'zero'}" data-day="${r.day}">
+          <div class="dnum"><b class="num">${Number(r.day.slice(8))}</b><span>${WEEK[new Date(`${r.day}T12:00:00`).getDay()]}</span></div>
+          <div class="m"><div class="dbar"><i class="c" style="width:${(r.cash / max) * 100}%"></i><i class="q" style="width:${(r.qi_card / max) * 100}%"></i></div>
+            <div class="dvals">${r.total ? `<i class="green">كاش <em class="num">${fmt(r.cash)}</em></i><i class="blue">كي <em class="num">${fmt(r.qi_card)}</em></i>${r.balance ? `<i>رصيد <em class="num">${fmt(r.balance)}</em></i>` : ''}` : '<i>لا يوجد دخل</i>'}${n ? `<i class="muted">${n} فاتورة</i>` : ''}</div></div>
+          <div class="e"><b class="num">${r.total ? fmt(r.total) : '—'}</b></div></button>`;
+      }).join('')}</div>
+      <div class="foot-note">اضغط على أي يوم لتفاصيله · الفواتير متوفرة لآخر ${sn.invoiceDays || 90} يوماً</div>`;
+  }
+  function daySheet(day) {
+    const sn = S.snap;
+    const r = dayIncome(day);
+    const invs = sn.invoices.filter((x) => x.created_at.slice(0, 10) === day);
+    const exps = (sn.expenses || []).filter((e) => e.expense_date === day);
+    const close = (sn.closings || []).find((k) => k.day === day);
+    const pays = invs.flatMap((x) => (x.payments || []).filter((p) => p.created_at.slice(0, 10) === day).map((p) => ({ ...p, receipt_no: x.receipt_no })));
+    const oldInv = day < addDays(todayStr(), -(sn.invoiceDays || 90));
+    const [, mm, dd] = day.split('-');
+    openSheet(`${WEEK[new Date(`${day}T12:00:00`).getDay()]} ${Number(dd)} ${MONTHS[Number(mm) - 1]}`, `
+      <div class="card hero" style="margin:0"><div class="lbl">دخل اليوم</div><div class="big"><span class="num">${fmt(r.total)}</span><small>د.ع</small></div>
+        <div class="split"><div><span>كاش</span><b class="num">${fmt(r.cash)}</b></div><div><span>كي كارد</span><b class="num">${fmt(r.qi_card)}</b></div>${r.balance ? `<div><span>من الرصيد</span><b class="num">${fmt(r.balance)}</b></div>` : ''}</div></div>
+      ${close ? `<div class="card"><div class="kv"><span>جرد الصندوق</span><b>${esc(close.full_name)}</b></div><div class="kv"><span>الكاش: المفروض / المعدود</span><b class="num">${fmt(close.expected_cash)} / ${fmt(close.counted_cash)}</b></div>${close.difference ? `<div class="kv"><span>فرق الكاش</span><b class="num ${close.difference < 0 ? 'red' : 'green'}">${close.difference > 0 ? '+' : ''}${fmt(close.difference)}</b></div>` : ''}${close.counted_qi != null ? `<div class="kv"><span>الكي كارد: المسجّل / الجهاز</span><b class="num">${fmt(close.expected_qi)} / ${fmt(close.counted_qi)}</b></div>` : ''}${close.notes ? `<div class="kv"><span>السبب</span><span>${esc(close.notes)}</span></div>` : ''}</div>` : ''}
+      ${oldInv ? `<div class="note">تفاصيل الفواتير متوفرة لآخر ${sn.invoiceDays || 90} يوماً — الأرقام أعلاه للدخل الكامل لهذا اليوم</div>` : `
+      <h2 class="sec" style="margin:0 4px">فواتير اليوم (${invs.filter((x) => !x.is_void).length})</h2>
+      <div class="card flush list">${invs.length ? invs.map((x) => `<button class="item noic" data-open="inv:${x.id}"><div class="m"><b>${esc(x.company_name || x.client_name)}${x.is_void ? ' <span class="chip red">ملغاة</span>' : ''}</b><span>${esc(x.receipt_no)} · ${esc(x.service_name || '')} · ${esc(x.by_name)}</span></div><div class="e"><b class="num">${fmt(x.total_amount)}</b>${x.total_amount > x.paid_amount && !x.is_void ? `<span class="chip red">متبقي ${fmt(x.total_amount - x.paid_amount)}</span>` : `<span class="chip gray">${METHOD[x.method] || ''}</span>`}</div></button>`).join('') : '<div class="empty">لا توجد فواتير</div>'}</div>
+      ${pays.filter((p) => p.kind !== 'initial').length ? `<h2 class="sec" style="margin:0 4px">تسديدات ديون بهذا اليوم</h2><div class="card flush list">${pays.filter((p) => p.kind !== 'initial').map((p) => `<div class="item noic"><div class="m"><b>${esc(p.receipt_no)}</b><span>${METHOD[p.method] || ''} · ${esc(p.by_name)}</span></div><div class="e"><b class="green num">${fmt(p.amount)}</b></div></div>`).join('')}</div>` : ''}`}
+      ${exps.length ? `<h2 class="sec" style="margin:0 4px">مصاريف اليوم</h2><div class="card flush list">${exps.map((e) => `<div class="item noic"><div class="m"><b>${esc(e.category)}${e.from_box ? ' <span class="chip gray">من الصندوق</span>' : ''}</b><span>${esc(e.notes || '')}</span></div><div class="e"><b class="red num">−${fmt(e.amount)}</b></div></div>`).join('')}</div>` : ''}`, (sb) => { bindRows(sb); });
+  }
+
   function finExpenses() {
     const months = Object.keys(S.snap.months).sort();
     const rows = S.snap.expenses.filter((x) => x.expense_date.slice(0, 7) === S.expMonth);

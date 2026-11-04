@@ -299,3 +299,20 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .note.amber { background: rgba(245,158,11,.14); color: #f5b544; }
 .note.red { background: rgba(239,68,68,.14); color: #f87171; }
 .note.green { background: rgba(34,197,94,.14); color: #4ade80; }
+
+/* الدخل اليومي */
+.days .day-row { align-items: center; }
+.days .day-row.zero { opacity: .45; }
+.days .dnum { width: 44px; display: flex; flex-direction: column; align-items: center; flex: none; }
+.days .dnum b { font-size: 19px; line-height: 1.1; }
+.days .dnum span { font-size: 10.5px; color: var(--ink-3, #8a93a6); }
+.days .dbar { display: flex; height: 6px; border-radius: 6px; overflow: hidden; background: var(--line); margin-bottom: 6px; }
+.days .dbar i { display: block; height: 100%; }
+.days .dbar i.c { background: #22c55e; }
+.days .dbar i.q { background: #3b82f6; }
+.blue { color: #60a5fa; }
+.chart .c { cursor: pointer; }
+
+.days .dvals { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
+.days .dvals i { font-style: normal; white-space: nowrap; }
+.days .dvals em { font-style: normal; font-weight: 800; }
