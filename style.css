@@ -338,3 +338,7 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .mdoc .art { color: #101a33; font-weight: 900; margin-top: 10px; } .mdoc p { margin: 3px 0; }
 .mdoc .box { border: 1px solid #e3dfd3; background: #fbfaf6; border-radius: 8px; padding: 8px 10px; margin: 6px 0; } .mdoc .box .big { font-weight: 900; font-size: 15px; color: #101a33; text-align: center; }
 .mdoc table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 6px 0; } .mdoc th, .mdoc td { border: 1px solid #ddd8ca; padding: 4px 6px; text-align: right; } .mdoc th { background: #f5f2ea; }
+.wa-prev { background: #ece5dd; border-radius: 16px; padding: 12px; max-height: 420px; overflow-y: auto; }
+.wa-bub { background: #dcf8c6; color: #111; border-radius: 12px 0 12px 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.75; white-space: pre-wrap; }
+.wa-bub b { font-weight: 900; } .wa-bub .lnk { color: #0b6aa8; direction: ltr; unicode-bidi: isolate; } .wa-bub .muted { color: #6b7c6a; }
+.wa-prev textarea { min-height: 360px; line-height: 1.7; padding-top: 10px; }

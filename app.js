@@ -677,6 +677,136 @@
     });
   }
 
+
+  // ═════════════ متطلبات التقديم: رسالة جاهزة بالأوراق المطلوبة لأي زبون (حتى غير مسجّل) ═════════════
+  // نفس منطق src/lib/reqs.js (برنامج الحاسبة)
+  const RQ_LINE = '━━━━━━━━━━━━━━';
+  const RQ_ICONS = ['🏢', '🧾', '📑', '🗂️', '📌', '🏛️'];
+
+  // الملاحظات: كل جملة مفصولة بـ · أو سطر جديد أو ، ← نقطة مستقلة
+  const splitNotes = (t) => String(t || '').split(/\n|·|•/).map((x) => x.trim()).filter(Boolean);
+
+  function reqTextFull(services, { name = '', office = '', phone = '', address = '', price = false, style = 'sections' } = {}) {
+    const S = services.map((s) => ({
+      name: s.name, price: s.default_price || 0,
+      must: (s.docs || []).filter((d) => !d.optional).map((d) => d.name),
+      opt: (s.docs || []).filter((d) => d.optional).map((d) => d.name),
+      notes: splitNotes(s.req?.notes), platform: s.req?.platform || '', link: s.req?.link || '',
+    }));
+    if (!S.length) return '';
+    const multi = S.length > 1;
+    // الأوراق المشتركة: موجودة بخدمتين أو أكثر من المختارة
+    const count = new Map();
+    S.forEach((s) => new Set(s.must).forEach((d) => count.set(d, (count.get(d) || 0) + 1)));
+    const shared = multi ? [...count.keys()].filter((d) => count.get(d) > 1) : [];
+    const notes = [...new Set(S.flatMap((s) => s.notes))];
+    const plats = S.filter((s) => s.platform || s.link).map((s) => ({ p: s.platform, l: s.link, svc: s.name }));
+    const priceOf = (s) => (price && s.price ? ` — الأجور ${fmt(s.price)} د.ع` : '');
+    const sign = [`_${office || 'المكتب'}_`, [address && `📍 ${address}`, phone && `📞 ${phone}`].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
+    const out = [];
+    out.push(`السلام عليكم${name ? ` ${name}` : ''} 🌿`);
+
+    if (style === 'checklist') {
+      const lines = [];
+      lines.push(multi ? `✅ *قائمة تجهيز: ${S.map((s) => s.name).join(' + ')}*` : `✅ *قائمة تجهيز: ${S[0].name}*${priceOf(S[0])}`);
+      lines.push('أشّر على كل ورقة تجهّزها 👇');
+      const all = [...new Set(S.flatMap((s) => s.must))];
+      const opts = [...new Set(S.flatMap((s) => s.opt))].filter((d) => !all.includes(d));
+      lines.push('', ...all.map((d) => `☐ ${d}`), ...opts.map((d) => `☐ ${d} _(عند الحاجة)_`));
+      if (!all.length && !opts.length) lines.push('', '☐ نتواصل معك لتحديد الأوراق المطلوبة');
+      out.push(lines.join('\n'));
+      if (multi && price && S.some((s) => s.price)) out.push(S.filter((s) => s.price).map((s) => `💰 ${s.name}: ${fmt(s.price)} د.ع`).join('\n'));
+      if (notes.length) out.push(`💡 *انتبه:* ${notes.join('، ')}.`);
+      if (plats.length) out.push(`🌐 نقدّمها على: ${plats.map((x) => x.p || x.l).join('، ')}`);
+      out.push('📤 صوّرها وأرسلها هنا — ونبلّغك أول ما تخلص.');
+      out.push(sign);
+      return out.join('\n\n');
+    }
+
+    // ── أقسام مرتّبة ──
+    out[0] += `\n${multi ? `متطلبات *${S.length === 2 ? 'خدمتين' : `${S.length} خدمات`}* لدى *${office || 'المكتب'}*` : `هذه متطلبات معاملتكم لدى *${office || 'المكتب'}*`}`;
+    let n = 0;
+    const num = (d) => `${++n}. ${d}`;
+    if (!multi) {
+      const s = S[0];
+      out.push(`${RQ_LINE}\n📋 *${s.name}*${priceOf(s)}\n${RQ_LINE}`);
+      out.push(s.must.length ? `*📄 الأوراق المطلوبة:*\n${s.must.map(num).join('\n')}` : '*📄 الأوراق المطلوبة:*\nنتواصل معك لتحديدها حسب حالتك');
+      if (s.opt.length) out.push(`*📎 عند الحاجة:*\n${s.opt.map((d) => `▫️ ${d}`).join('\n')}`);
+    } else {
+      if (shared.length) out.push(`*📄 أوراق مشتركة (مرة وحدة تكفي):*\n${shared.map(num).join('\n')}`);
+      S.forEach((s, i) => {
+        const own = s.must.filter((d) => !shared.includes(d));
+        const lines = [`*${RQ_ICONS[i % RQ_ICONS.length]} ${s.name}${shared.length ? ' — تضيف' : ''}:*`];
+      if (price && s.price) lines.push(`💰 الأجور ${fmt(s.price)} د.ع`);
+        if (own.length) lines.push(...own.map(num));
+        else if (!s.must.length) lines.push('▫️ نتواصل معك لتحديد الأوراق');
+        else lines.push('▫️ ما تحتاج أوراق إضافية');
+        if (s.opt.length) lines.push(`▫️ _عند الحاجة:_ ${s.opt.join('، ')}`);
+        out.push(lines.join('\n'));
+      });
+    }
+    if (notes.length) out.push(`*⚠️ ملاحظات مهمة:*\n${notes.map((x) => `▫️ ${x}`).join('\n')}`);
+    if (plats.length) {
+      out.push(`*🌐 التقديم إلكترونياً:*\n${plats.length === 1 && !multi
+        ? [plats[0].p, plats[0].l].filter(Boolean).join('\n')
+        : plats.map((x) => `▫️ ${x.p || x.svc}${x.l ? `\n${x.l}` : ''}`).join('\n')}`);
+    }
+    out.push('*📤 طريقة الإرسال:*\nصوّر كل ورقة بوضوح (صورة واضحة أو PDF) وأرسلها هنا، ونقدّمها إلكترونياً ونبلّغك بكل مرحلة.');
+    out.push(`${RQ_LINE}\n${sign}`);
+    return out.join('\n\n');
+  }
+
+  // عرض نص واتساب (*غامق* و _مائل_) داخل فقاعة المعاينة
+  function waHtmlR(t) {
+    const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    return esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_/g, '$1<i>$2</i>').replace(/(https?:\/\/\S+)/g, '<span class="lnk">$1</span>');
+  }
+  const reqText = (list, name, price, style) => reqTextFull(list, { name, office: S.snap.office?.name, phone: S.snap.office?.phone, address: S.snap.office?.address, price, style });
+
+  function reqSheet(pre = []) {
+    const all = (S.snap.servicesAll || []).filter((s) => s.is_active);
+    if (!all.length) return toast('حدّث برنامج المكتب حتى تظهر الخدمات', true);
+    const sel = new Set(pre);
+    openSheet('متطلبات خدمة للزبون', `
+      <div class="search">${icon('search', 18)}<input class="input" id="rq" type="search" placeholder="ابحث عن خدمة"></div>
+      <div class="card flush" id="rlist" style="max-height:300px;overflow-y:auto"></div>
+      <div class="grid2"><div class="field"><label>اسم الزبون (اختياري)</label><input class="input" name="nm"></div><div class="field"><label>رقمه (اختياري)</label><input class="input ltr" name="ph" inputmode="tel" placeholder="07xx"></div></div>
+      ${seg('pr', [['0', 'بدون أجور'], ['1', 'إظهار الأجور']], '0')}
+      ${seg('st', [['sections', 'أقسام مرتّبة'], ['checklist', 'قائمة تجهيز ☐']], LS.get('zm-req-style') === 'checklist' ? 'checklist' : 'sections')}
+      <h2 class="sec" style="margin:0 4px">هكذا توصل للزبون <button class="more" id="ed">تعديل النص</button></h2>
+      <div class="wa-prev"><div class="wa-bub" id="bub"><span class="muted">اختر خدمة…</span></div><textarea class="input" name="tx" hidden></textarea></div>
+      <div class="grid2"><button class="btn btn-gold" id="wa">${icon('chat', 17)} واتساب</button><button class="btn btn-ghost" id="sh">مشاركة / نسخ</button></div>
+      <div class="foot-note">الأوراق والملاحظات ورابط المنصة تُكتب لكل خدمة من «الإدارة ← الخدمات والأسعار»</div>`, (sb) => {
+      const tx = sb.querySelector('[name=tx]'); const bub = sb.querySelector('#bub'); let edited = false;
+      let pr = '0'; let st = LS.get('zm-req-style') === 'checklist' ? 'checklist' : 'sections';
+      bindSeg(sb, 'pr', (v) => { pr = v; edited = false; build(); });
+      bindSeg(sb, 'st', (v) => { st = v; LS.set('zm-req-style', v); edited = false; build(); });
+      const show = () => { bub.innerHTML = tx.value.trim() ? waHtmlR(tx.value) : '<span class="muted">اختر خدمة…</span>'; };
+      const build = () => { if (edited) return; tx.value = sel.size ? reqText(all.filter((s) => sel.has(s.id)), val(sb, 'nm'), pr === '1', st) : ''; show(); };
+      sb.querySelector('#ed').onclick = () => { const on = tx.hidden; tx.hidden = !on; bub.hidden = on; sb.querySelector('#ed').textContent = on ? 'معاينة' : 'تعديل النص'; if (!on) show(); };
+      const paint = () => {
+        const q = (sb.querySelector('#rq').value || '').trim();
+        sb.querySelector('#rlist').innerHTML = all.filter((s) => !q || s.name.includes(q)).map((s) => `<label class="item noic dk"><input type="checkbox" data-s="${s.id}" ${sel.has(s.id) ? 'checked' : ''}><div class="m"><b>${esc(s.name)}</b><span>${(s.docs || []).length ? `${s.docs.length} أوراق` : 'بدون قائمة أوراق'}${s.req?.platform ? ` · ${esc(s.req.platform)}` : ''}</span></div></label>`).join('');
+        sb.querySelectorAll('[data-s]').forEach((c) => { c.onchange = () => { const id = Number(c.dataset.s); if (c.checked) sel.add(id); else sel.delete(id); edited = false; build(); }; });
+      };
+      sb.querySelector('#rq').oninput = paint;
+      sb.querySelector('[name=nm]').oninput = () => { edited = false; build(); };
+      tx.oninput = () => { edited = true; };
+      paint(); build();
+      sb.querySelector('#wa').onclick = () => {
+        if (!tx.value.trim()) return toast('اختر خدمة', true);
+        const ph = val(sb, 'ph');
+        const url = ph ? waLink(ph, tx.value) : `https://wa.me/?text=${encodeURIComponent(tx.value)}`;
+        if (!url) return toast('رقم الهاتف غير صحيح', true);
+        window.open(url, '_blank');
+      };
+      sb.querySelector('#sh').onclick = async () => {
+        if (!tx.value.trim()) return toast('اختر خدمة', true);
+        try { if (navigator.share) await navigator.share({ text: tx.value }); else { await navigator.clipboard.writeText(tx.value); toast('تم النسخ'); } } catch { /* أُلغيت المشاركة */ }
+      };
+    });
+  }
+
   // ═════════════ دورة المعاملة: المعاملات، عهدة المعقّبين، العقود والأقساط، التجديدات ═════════════
   const OF = () => S.snap?.ofc || null;
   const STG = [['docs', 'بانتظار الأوراق'], ['office', 'قيد الإنجاز'], ['courier', 'عند المعقّب'], ['ready', 'جاهزة'], ['delivered', 'سُلّمت']];
@@ -963,12 +1093,20 @@
       <div class="field"><label>اسم الخدمة</label><input class="input" name="name" value="${esc(v?.name || '')}"></div>
       ${moneyField('price', 'السعر (اتركه 0 إذا حسب الطلب)', v?.default_price || 0)}
       <div class="field"><label>القسم</label><input class="input" name="cat" list="svccats" value="${esc(v?.category || '')}"><datalist id="svccats">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div class="field"><label>الأوراق المطلوبة (كل ورقة بسطر — اكتب «اختياري:» قبل الورقة الاختيارية)</label><textarea class="input" name="docs" rows="5" style="height:auto;line-height:1.7;padding-top:10px">${esc((v?.docs || []).map((d) => `${d.optional ? 'اختياري: ' : ''}${d.name}`).join('\n'))}</textarea></div>
+      <div class="field"><label>ملاحظات التقديم (اختياري)</label><input class="input" name="rn" value="${esc(v?.req?.notes || '')}"></div>
+      <div class="grid2"><div class="field"><label>المنصة (اختياري)</label><input class="input" name="rp" value="${esc(v?.req?.platform || '')}"></div><div class="field"><label>رابطها (اختياري)</label><input class="input ltr" name="rl" value="${esc(v?.req?.link || '')}" placeholder="https://"></div></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ</button>
+      ${v ? `<button class="btn btn-ghost btn-block" id="rqs">${icon('chat', 17)} إرسال متطلباتها لزبون</button>` : ''}
       ${v ? `<button class="btn btn-ghost btn-block" id="tg">${v.is_active ? 'إيقاف الخدمة' : 'تفعيل الخدمة'}</button>` : ''}`, (sb) => {
       sb.querySelector('#ok').onclick = () => {
         const name = val(sb, 'name'); if (!name) return toast('اكتب اسم الخدمة', true);
-        sendOp('services:save', { id: v?.id, name, default_price: mval(sb, 'price') || 0, icon: v?.icon || 'file', category: val(sb, 'cat') || 'أخرى' }, `${v ? 'تعديل' : 'إضافة'} خدمة ${name}`);
+        const docs = (sb.querySelector('[name=docs]').value || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (/^اختياري\s*[:：]/.test(l) ? { name: l.replace(/^اختياري\s*[:：]\s*/, ''), optional: true } : { name: l, optional: false }));
+        const link = val(sb, 'rl');
+        if (link && !/^https?:\/\//i.test(link)) return toast('الرابط يجب أن يبدأ بـ https://', true);
+        sendOp('services:save', { id: v?.id, name, default_price: mval(sb, 'price') || 0, icon: v?.icon || 'file', category: val(sb, 'cat') || 'أخرى', docs, req: { notes: val(sb, 'rn'), platform: val(sb, 'rp'), link } }, `${v ? 'تعديل' : 'إضافة'} خدمة ${name}`);
       };
+      sb.querySelector('#rqs')?.addEventListener('click', () => reqSheet([v.id]));
       sb.querySelector('#tg')?.addEventListener('click', () => sendOp('services:toggle', { id: v.id }, `${v.is_active ? 'إيقاف' : 'تفعيل'} ${v.name}`));
     });
   }
@@ -1673,11 +1811,12 @@
       ['debt', 'cash', 'تسديد دين', 'دفعة من عميل'],
       ['swap', 'card', 'كي كارد مقابل كاش', 'دفعت بالكارد واستلمت كاش'],
       ['client', 'userPlus', 'عميل جديد', 'للبيع على الحساب'],
+      ['req', 'chat', 'متطلبات خدمة', 'أرسل الأوراق المطلوبة للزبون'],
     ];
     openSheet('إضافة', `<div class="actions">${A.map(([k, i, t, s]) => `<button class="action press" data-add="${k}"><span class="ic">${icon(i, 21)}</span><b>${t}</b><span>${s}</span></button>`).join('')}</div>`, (sb) => {
       sb.querySelectorAll('[data-add]').forEach((b) => {
         b.onclick = () => ({
-          inv: () => invoiceForm(), exp: () => expenseSheet(), swap: () => swapSheet(), ext: () => externalSheet(), task: () => taskSheet(), client: () => clientForm(),
+          req: () => reqSheet(), inv: () => invoiceForm(), exp: () => expenseSheet(), swap: () => swapSheet(), ext: () => externalSheet(), task: () => taskSheet(), client: () => clientForm(),
           debt: () => { S.tab = 'clients'; closeSheet(true); render(); toast('اختر العميل ثم «دفعة»'); },
         })[b.dataset.add]();
       });
