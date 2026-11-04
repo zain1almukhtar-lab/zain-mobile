@@ -316,3 +316,25 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .days .dvals { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .days .dvals i { font-style: normal; white-space: nowrap; }
 .days .dvals em { font-style: normal; font-weight: 800; }
+
+/* ── دورة المعاملة (2.1) ── */
+.tx-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.tx-chips .chip { height: 22px; font-size: 11px; }
+.stg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.stg button { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: var(--muted); padding: 8px 2px; border-radius: 12px; background: var(--card); border: .5px solid var(--line-2); }
+.stg button i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 900; background: var(--card-3); color: var(--ink-2); }
+.stg button.done { color: var(--green); } .stg button.done i { background: var(--green); color: #fff; }
+.stg button.cur { color: var(--gold-2); border-color: var(--gold-line); background: var(--gold-soft); } .stg button.cur i { background: var(--gold-2); color: #17140c; }
+.item.dk { cursor: pointer; } .item.dk input { width: 22px; height: 22px; accent-color: var(--green); flex: none; }
+.agree { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; font-weight: 700; line-height: 1.6; background: var(--card); border: .5px solid var(--line-2); border-radius: 15px; padding: 12px 14px; }
+.agree input { width: 22px; height: 22px; accent-color: var(--gold-2); flex: none; margin-top: 1px; }
+.mpad { position: relative; height: 200px; background: #fff; border-radius: 16px; border: 2px dashed #c8c2b2; touch-action: none; }
+.mpad canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.mpad span { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11.5px; color: #9a958a; pointer-events: none; }
+.mdoc { background: #fff; color: #1a1a1a; border-radius: 14px; padding: 16px 14px; font-size: 13px; line-height: 1.85; }
+.mdoc-hd { display: flex; flex-direction: column; border-bottom: 3px double #c39a45; padding-bottom: 8px; }
+.mdoc-hd b { font-size: 16px; color: #101a33; } .mdoc-hd span { font-size: 11.5px; color: #666; }
+.mdoc h3 { text-align: center; font-size: 17px; color: #101a33; margin: 12px 0 2px; } .mdoc .sub { text-align: center; color: #777; font-size: 11px; margin-bottom: 8px; }
+.mdoc .art { color: #101a33; font-weight: 900; margin-top: 10px; } .mdoc p { margin: 3px 0; }
+.mdoc .box { border: 1px solid #e3dfd3; background: #fbfaf6; border-radius: 8px; padding: 8px 10px; margin: 6px 0; } .mdoc .box .big { font-weight: 900; font-size: 15px; color: #101a33; text-align: center; }
+.mdoc table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 6px 0; } .mdoc th, .mdoc td { border: 1px solid #ddd8ca; padding: 4px 6px; text-align: right; } .mdoc th { background: #f5f2ea; }

@@ -409,6 +409,7 @@
     if (cq) cq.oninput = () => { S.cq = cq.value; main.querySelector('#clist').innerHTML = clientList(); bindRows(main); };
     bindRows(main);
     bindAudit(main);
+    bindOffice(main);
     main.querySelectorAll('[data-day]').forEach((el) => { el.onclick = () => daySheet(el.dataset.day); });
   }
   function bindRows(root) {
@@ -495,6 +496,8 @@
         ${kpi('الخصومات', money(d.discountTotal))}
         ${kpi('مدخولك الخارجي', `<span class="gold">${money(d.externalTotal)}</span>`)}
       </div>
+
+      ${officeTiles()}
 
       <h2 class="sec">آخر التعديلات على النظام <button class="more" data-act="activity">عرض الكل</button></h2>
       <div class="card flush">${auditList().length ? auditList().slice(0, 6).map(auditRow).join('') : '<div class="empty">لا يوجد نشاط بعد</div>'}</div>
@@ -674,6 +677,221 @@
     });
   }
 
+  // ═════════════ دورة المعاملة: المعاملات، عهدة المعقّبين، العقود والأقساط، التجديدات ═════════════
+  const OF = () => S.snap?.ofc || null;
+  const STG = [['docs', 'بانتظار الأوراق'], ['office', 'قيد الإنجاز'], ['courier', 'عند المعقّب'], ['ready', 'جاهزة'], ['delivered', 'سُلّمت']];
+  const STL = { docs: 'بانتظار الأوراق', office: 'قيد الإنجاز بالمكتب', courier: 'عند المعقّب / الدائرة', ready: 'جاهزة للتسليم', delivered: 'سُلّمت', cancelled: 'ملغاة' };
+  const daysTo = (d) => Math.round((new Date(`${d}T12:00:00`) - new Date(`${todayStr()}T12:00:00`)) / 86400000);
+  const openTx = () => (OF()?.txns || []).filter((t) => ['docs', 'office', 'courier', 'ready'].includes(t.stage));
+
+  // بطاقات المكتب في الرئيسية
+  function officeTiles() {
+    const o = OF(); if (!o) return '';
+    const open = openTx(); const late = open.filter((t) => t.late).length;
+    const cOpen = o.couriers?.totals?.open || 0;
+    const od = (o.installments || []).filter((x) => x.status === 'overdue');
+    const pend = (o.pending || []).length;
+    const exp = (o.expiries || []).filter((e) => daysTo(e.expires_on) <= 30 && daysTo(e.expires_on) >= -60);
+    return `<h2 class="sec">المكتب</h2>
+      <div class="actions">
+        <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${open.length} مفتوحة${late ? ` · <span class="red" style="display:inline">${late} متأخرة</span>` : ''}</span></button>
+        <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المعقّبين</b><span>${cOpen ? `عندهم ${fmt(cOpen)}` : 'مسوّاة'}</span></button>
+        <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${pend ? `${pend} بانتظار التوقيع` : ''}${pend && od.length ? ' · ' : ''}${od.length ? `<span class="red" style="display:inline">${od.length} قسط متأخر</span>` : ''}${!pend && !od.length ? `${(o.contracts || []).length} عقد` : ''}</span></button>
+        <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>${exp.length ? `${exp.length} خلال 30 يوم أو منتهية` : 'لا شيء قريب'}</span></button>
+      </div>`;
+  }
+  function bindOffice(root) {
+    root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet })[b.dataset.ofc](); });
+  }
+
+  // ───── المعاملات ─────
+  function txnRow(t) {
+    const chips = [];
+    if (t.stage === 'docs' && t.missing) chips.push(`<span class="chip amber">ناقص ${t.missing}</span>`);
+    if (t.courier_name) chips.push(`<span class="chip gold">${esc(t.courier_name)}</span>`);
+    if (t.late) chips.push(`<span class="chip red">متأخرة ${t.late_days} يوم</span>`);
+    if (t.remaining > 0 && (t.stage === 'ready' || t.stage === 'delivered')) chips.push(`<span class="chip red">دين ${fmt(t.remaining)}</span>`);
+    return `<button class="item noic" data-tx="${t.id}"><div class="m"><b>${esc(t.title)}</b><span>${esc(t.party_name || t.client_name || '—')} · ${STL[t.stage]}</span>${chips.length ? `<div class="tx-chips">${chips.join('')}</div>` : ''}</div></button>`;
+  }
+  function txnsSheet(filter = 'open') {
+    const all = OF()?.txns || [];
+    const sets = { open: openTx(), missing: openTx().filter((t) => t.missing > 0), late: openTx().filter((t) => t.late), ready: all.filter((t) => t.stage === 'ready'), done: all.filter((t) => t.stage === 'delivered' || t.stage === 'cancelled') };
+    const list = sets[filter] || [];
+    openSheet('المعاملات', `
+      <div class="chips wrap">${[['open', `مفتوحة ${sets.open.length}`], ['missing', `ناقصها أوراق ${sets.missing.length}`], ['late', `متأخرة ${sets.late.length}`], ['ready', `جاهزة ${sets.ready.length}`], ['done', 'المنتهية']].map(([k, l]) => `<button class="${k === filter ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
+      ${pendingRows(['txn:stage', 'txn:update', 'txn:note']).length ? `<div class="card flush">${pendingRows(['txn:stage', 'txn:update', 'txn:note'])}</div>` : ''}
+      <div class="card flush list">${list.map(txnRow).join('') || '<div class="empty">لا توجد معاملات</div>'}</div>`, (sb) => {
+      sb.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => txnsSheet(b.dataset.f); });
+      sb.querySelectorAll('[data-tx]').forEach((b) => { b.onclick = () => txnSheet(Number(b.dataset.tx)); });
+    });
+  }
+  function txnSheet(id) {
+    const t = (OF()?.txns || []).find((x) => x.id === id);
+    if (!t) return;
+    const idx = STG.findIndex(([k]) => k === t.stage);
+    const docs = (t.docs || []).map((d) => ({ ...d }));
+    const office = S.snap.office?.name || 'المكتب';
+    const waMsg = `السلام عليكم ${t.client_name || t.party_name || ''}،\nبخصوص معاملة ${t.title}${t.receipt_no ? ` (فاتورة ${t.receipt_no})` : ''} لدى ${office}:\n${({ docs: t.missing ? `باقي علينا من الأوراق:\n${docs.filter((d) => !d.got && !d.optional).map((d) => `• ${d.name}`).join('\n')}\nنرجو جلبها بأقرب وقت.` : 'استلمنا أوراقكم وباشرنا بالمعاملة.', office: 'معاملتكم قيد الإنجاز في المكتب.', courier: 'معاملتكم الآن لدى الدائرة المختصة.', ready: 'معاملتكم جاهزة للتسليم — تفضلوا بمراجعة المكتب.', delivered: 'تم تسليم المعاملة. شكراً لثقتكم.' })[t.stage] || ''}`;
+    const wa = t.client_phone ? waLink(t.client_phone, waMsg) : '';
+    openSheet(esc(t.title), `
+      <div class="card">
+        <div class="kv"><span>الجهة</span><b>${esc(t.party_name || t.client_name || '—')}</b></div>
+        ${t.receipt_no ? `<div class="kv"><span>الفاتورة</span><b class="num">${esc(t.receipt_no)}</b></div>` : ''}
+        ${t.total !== undefined && t.sale_id ? `<div class="kv"><span>المبلغ / المدفوع</span><b class="num">${fmt(t.total)} / ${fmt(t.paid)}</b></div>` : ''}
+        ${t.remaining > 0 ? `<div class="kv"><span>الباقي دين</span><b class="red num">${fmt(t.remaining)}</b></div>` : ''}
+        ${t.courier_name ? `<div class="kv"><span>المعقّب</span><b>${esc(t.courier_name)}</b></div>` : ''}
+        ${t.due_date ? `<div class="kv"><span>الموعد المتوقع</span><b class="${t.late ? 'red' : ''}">${dayLabel(t.due_date)}${t.late ? ` (متأخرة ${t.late_days} يوم)` : ''}</b></div>` : ''}
+        <div class="kv"><span>فُتحت</span><b>${dayTime(t.created_at)}</b></div>
+      </div>
+      ${t.stage === 'cancelled' ? `<div class="alert">ملغاة — ${esc(t.cancel_info?.reason || '')}</div>` : `
+      <h2 class="sec" style="margin:0 4px">المرحلة</h2>
+      <div class="stg">${STG.map(([k, l], i) => `<button data-st="${k}" class="${i < idx ? 'done' : i === idx ? 'cur' : ''}"><i>${i < idx ? icon('check', 13) : i + 1}</i>${l}</button>`).join('')}</div>`}
+      ${docs.length ? `<h2 class="sec" style="margin:0 4px">الأوراق — ${docs.filter((d) => d.got).length} من ${docs.length}</h2>
+      <div class="card flush">${docs.map((d, i) => `<label class="item noic dk"><input type="checkbox" data-dk="${i}" ${d.got ? 'checked' : ''}><div class="m"><b>${esc(d.name)}</b>${d.optional ? '<span>اختياري</span>' : ''}</div></label>`).join('')}</div>
+      <button class="btn btn-ghost btn-block" id="svd" hidden>${icon('check', 17)} حفظ الأوراق</button>` : ''}
+      ${wa ? `<a class="btn btn-ghost btn-block" href="${wa}" target="_blank" rel="noopener">${icon('chat', 17)} إبلاغ الزبون بالمرحلة (واتساب)</a>` : ''}
+      ${(t.events || []).length ? `<h2 class="sec" style="margin:0 4px">السجل</h2><div class="card flush">${t.events.map((e) => `<div class="item noic"><div class="m"><b style="white-space:normal">${esc(e.text)}</b><span>${dayTime(e.created_at)} · ${esc(e.by_name || '')}</span></div></div>`).join('')}</div>` : ''}
+      <div class="field"><label>ملاحظة</label><input class="input" name="note" placeholder="اكتب ملاحظة…"></div>
+      <button class="btn btn-ghost btn-block" id="nt">إضافة الملاحظة</button>`, (sb) => {
+      sb.querySelectorAll('[data-st]').forEach((b) => {
+        b.onclick = () => { const st = b.dataset.st; if (st === t.stage) return; if (confirm(`نقل المعاملة إلى: ${STL[st]}؟`)) sendOp('txn:stage', { id: t.id, stage: st }, `${t.title} ← ${STL[st]}`); };
+      });
+      const svd = sb.querySelector('#svd');
+      sb.querySelectorAll('[data-dk]').forEach((c) => { c.onchange = () => { docs[Number(c.dataset.dk)].got = c.checked; if (svd) svd.hidden = false; }; });
+      if (svd) svd.onclick = () => sendOp('txn:update', { id: t.id, docs }, `أوراق: ${t.title}`);
+      sb.querySelector('#nt').onclick = () => { const n = val(sb, 'note'); if (!n) return toast('اكتب الملاحظة', true); sendOp('txn:note', { id: t.id, text: n }, `ملاحظة: ${t.title}`); };
+    });
+  }
+
+  // ───── عهدة المعقّبين ─────
+  function couriersSheet() {
+    const c = OF()?.couriers; if (!c) return;
+    openSheet('عهدة المعقّبين', `
+      <div class="card hero"><div class="lbl">لسه عند المعقّبين</div><div class="big"><span class="num">${fmt(c.totals.open)}</span><small>د.ع</small></div>
+        <div class="split"><div><span>اليوم: عهدة</span><b class="num">${fmt(c.today.given)}</b></div><div><span>اليوم: رجع للصندوق</span><b class="num">${fmt(c.today.returned)}</b></div></div></div>
+      ${pendingRows(['courier:move']).length ? `<div class="card flush">${pendingRows(['courier:move'])}</div>` : ''}
+      <div class="card flush list">${c.rows.filter((k) => k.is_active || k.balance).map((k) => `<button class="item" data-k="${k.id}"><div class="av ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${initial(k.name)}</div><div class="m"><b>${esc(k.name)}</b><span>${k.open_txns ? `${k.open_txns} معاملة مفتوحة` : 'لا معاملات مفتوحة'}</span></div><div class="e"><b class="num ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${fmt(Math.abs(k.balance))}</b><span class="chip">${k.balance > 0 ? 'عنده' : k.balance < 0 ? 'له' : 'مسوّى'}</span></div></button>`).join('') || '<div class="empty">أضف المعقّبين من برنامج المكتب</div>'}</div>
+      <div class="foot-note">العهدة تخرج من الصندوق، والوصولات تنسجّل مصروف رسوم على المعاملة، والباقي يرجع للصندوق</div>`, (sb) => {
+      sb.querySelectorAll('[data-k]').forEach((b) => { b.onclick = () => courierSheet(Number(b.dataset.k)); });
+    });
+  }
+  function courierSheet(id) {
+    const k = OF()?.couriers?.rows.find((x) => x.id === id); if (!k) return;
+    const KL = { give: 'عهدة', receipt: 'وصل رسوم', return: 'إرجاع' };
+    openSheet(esc(k.name), `
+      <div class="kpis">${kpi(k.balance >= 0 ? 'باقي عنده' : 'له على المكتب', `<span class="${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${money(Math.abs(k.balance))}</span>`, '', 'wide')}</div>
+      <div class="grid2"><button class="btn btn-gold" data-mv="give">${icon('plus', 17)} عهدة</button><button class="btn btn-ghost" data-mv="receipt">${icon('receipt', 17)} وصل رسوم</button></div>
+      ${k.balance > 0 ? `<button class="btn btn-ghost btn-block" data-mv="return">${icon('cash', 17)} استلام الباقي ${fmt(k.balance)}</button>` : ''}
+      ${k.phone ? `<a class="btn btn-ghost btn-block" href="tel:${esc(k.phone)}">${icon('phone', 17)} اتصال</a>` : ''}
+      <h2 class="sec" style="margin:0 4px">الحركات</h2>
+      <div class="card flush">${(k.moves || []).map((m) => `<div class="item noic"><div class="m"><b>${KL[m.kind]}${m.notes ? ` — ${esc(m.notes)}` : ''}</b><span>${dayTime(m.created_at)}${m.txn_title ? ` · ${esc(m.txn_title)}` : ''}${m.receipt_no ? ` · وصل ${esc(m.receipt_no)}` : ''}</span></div><div class="e"><b class="num ${m.kind === 'give' ? 'red' : 'green'}">${m.kind === 'give' ? '' : '−'}${fmt(m.amount)}</b></div></div>`).join('') || '<div class="empty">لا توجد حركات</div>'}</div>`, (sb) => {
+      sb.querySelectorAll('[data-mv]').forEach((b) => { b.onclick = () => courierMoveSheet(k, b.dataset.mv); });
+    });
+  }
+  function courierMoveSheet(k, kind) {
+    const T = { give: 'إعطاء عهدة من الصندوق', receipt: 'وصل رسوم', return: 'استلام الباقي (يرجع للصندوق)' };
+    const tx = openTx();
+    openSheet(T[kind], `
+      ${moneyField('amount', 'المبلغ', kind === 'return' ? Math.max(0, k.balance) : 0)}
+      ${kind !== 'return' ? `<div class="field"><label>للمعاملة (اختياري)</label><select class="input" name="txn"><option value="">—</option>${tx.map((t) => `<option value="${t.id}" ${t.courier_id === k.id ? '' : ''}>${esc(t.title)}${t.party_name ? ` — ${esc(t.party_name)}` : ''}</option>`).join('')}</select></div>` : ''}
+      ${kind === 'receipt' ? '<div class="field"><label>رقم الوصل (اختياري)</label><input class="input" name="rno" inputmode="numeric"></div>' : ''}
+      <div class="field"><label>${kind === 'receipt' ? 'البيان (مثال: رسوم تسجيل — دائرة التسجيل)' : 'ملاحظة (اختياري)'}</label><input class="input" name="notes"></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ — ${esc(k.name)}</button>`, (sb) => {
+      sb.querySelector('#ok').onclick = () => {
+        const amount = mval(sb, 'amount'); if (!amount) return toast('اكتب المبلغ', true);
+        if (kind === 'return' && amount > k.balance) return toast(`أكبر مما عنده (${fmt(k.balance)})`, true);
+        const notes = val(sb, 'notes'); const txn = Number(val(sb, 'txn')) || null;
+        if (kind === 'receipt' && !notes && !txn) return toast('اكتب البيان أو اختر المعاملة', true);
+        sendOp('courier:move', { courier_id: k.id, kind, amount, txn_id: txn, notes, receipt_no: val(sb, 'rno') }, `${T[kind]} — ${k.name} ${fmt(amount)}`);
+      };
+    });
+  }
+
+  // ───── التجديدات ─────
+  function expiriesSheet() {
+    const list = (OF()?.expiries || []).slice().sort((a, b) => a.expires_on.localeCompare(b.expires_on));
+    const row = (e) => {
+      const n = daysTo(e.expires_on);
+      const cls = n < 0 ? 'red' : n <= 30 ? 'amber' : 'green';
+      const wa = e.client_phone ? waLink(e.client_phone, `السلام عليكم ${e.client_name}،\nنود تذكيركم بأن «${e.title}»${e.client_company ? ` لـ${e.client_company}` : ''} ${n < 0 ? `انتهت بتاريخ ${e.expires_on}` : `تنتهي بتاريخ ${e.expires_on} (بعد ${n} يوم)`}.\nيسعدنا إنجاز التجديد لكم — تواصلوا معنا.`) : '';
+      return `<div class="item"><div class="av ${cls}" style="font-size:11px;line-height:1.1;text-align:center">${n < 0 ? `${-n}<br>يوم` : n > 99 ? `${Math.round(n / 30)}<br>شهر` : `${n}<br>يوم`}</div><div class="m"><b>${esc(e.title)}</b><span>${esc(e.client_company || e.client_name)} · ${e.expires_on}</span></div><div class="e">${wa && n <= 45 ? `<a class="chip green" href="${wa}" target="_blank" rel="noopener">${icon('chat', 12)} تذكير</a>` : ''}</div></div>`;
+    };
+    const soon = list.filter((e) => daysTo(e.expires_on) <= 30);
+    const later = list.filter((e) => daysTo(e.expires_on) > 30);
+    openSheet('التجديدات وتواريخ الانتهاء', `
+      ${soon.length ? `<h2 class="sec" style="margin:0 4px">منتهية أو خلال 30 يوم</h2><div class="card flush">${soon.map(row).join('')}</div>` : '<div class="note">لا توجد تجديدات قريبة ✓</div>'}
+      ${later.length ? `<h2 class="sec" style="margin:0 4px">لاحقاً</h2><div class="card flush">${later.slice(0, 80).map(row).join('')}</div>` : ''}
+      <div class="foot-note">تُضاف التواريخ من برنامج المكتب: العملاء ← ملف الشركة</div>`);
+  }
+
+  // ───── العقود والأقساط + التوقيع ─────
+  const KIND = { service: 'عقد خدمة', handover: 'محضر تسليم', debt: 'إقرار بدين', external: 'سند خدمة خارجية' };
+  function contractsSheet() {
+    const o = OF(); if (!o) return;
+    const inst = o.installments || [];
+    openSheet('العقود والأقساط', `
+      ${(o.pending || []).length ? `<h2 class="sec" style="margin:0 4px">بانتظار التوقيع</h2><div class="card flush">${o.pending.map((p) => `<button class="item" data-sign="${p.id}"><div class="av amber">${icon('edit', 18)}</div><div class="m"><b>${esc(p.party_name)}</b><span>${KIND[p.kind]} · ${esc(p.no)}${p.amount ? ` · ${fmt(p.amount)}` : ''}</span></div><div class="e"><span class="chip gold">توقيع</span></div></button>`).join('')}</div>` : ''}
+      ${pendingRows(['contract:sign']).length ? `<div class="card flush">${pendingRows(['contract:sign'])}</div>` : ''}
+      ${inst.length ? `<h2 class="sec" style="margin:0 4px">الأقساط — متأخرة ومستحقة هذا الشهر</h2><div class="card flush">${inst.map((x) => {
+        const c = S.snap.clients.find((y) => y.id === x.client_id);
+        const wa = x.phone ? waLink(x.phone, `السلام عليكم ${x.party_name}،\nنود تذكيركم بالقسط ${x.n} من ${x.count} حسب الإقرار رقم ${x.no} بمبلغ ${fmt(x.left)} د.ع${x.status === 'overdue' ? ` المستحق بتاريخ ${x.due}` : ` المستحق بتاريخ ${x.due}`}.\nشكراً لكم.`) : '';
+        return `<div class="item"><div class="av ${x.status === 'overdue' ? 'red' : 'amber'}">${x.n}</div><div class="m"><b>${esc(x.party_name)}</b><span>${x.status === 'overdue' ? `<span class="red" style="display:inline">متأخر ${x.overdue_days} يوم</span>` : dayLabel(x.due)} · قسط ${x.n}/${x.count} · ${esc(x.no)}</span></div><div class="e"><b class="num">${fmt(x.left)}</b>${wa ? `<a class="chip green" href="${wa}" target="_blank" rel="noopener">${icon('chat', 12)} تذكير</a>` : ''}${c && c.balance > 0 ? `<button class="chip gold" data-pay="${c.id}">تسديد</button>` : ''}</div></div>`;
+      }).join('')}</div>` : ''}
+      <h2 class="sec" style="margin:0 4px">كل العقود</h2>
+      <div class="card flush">${(o.contracts || []).slice(0, 120).map((c) => `<div class="item noic"><div class="m"><b>${esc(c.party_name)}</b><span>${KIND[c.kind]} · ${esc(c.no)} · ${esc(c.subject || '')}</span></div><div class="e"><b class="num">${fmt(c.amount)}</b><span class="chip ${c.state.cls === 'gray' ? '' : c.state.cls}">${esc(c.state.text)}</span></div></div>`).join('') || '<div class="empty">لا توجد عقود بعد</div>'}</div>
+      <div class="foot-note">تنظيم العقود والطباعة من برنامج المكتب — والتوقيع يصير هنا بإصبع الزبون</div>`, (sb) => {
+      sb.querySelectorAll('[data-sign]').forEach((b) => { b.onclick = () => signSheet(Number(b.dataset.sign)); });
+      sb.querySelectorAll('[data-pay]').forEach((b) => { b.onclick = () => { closeSheet(true); clientSheet(b.dataset.pay); }; });
+    });
+  }
+  const rich = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  function docHtml(d) {
+    return `<div class="mdoc">
+      <div class="mdoc-hd"><b>${esc(d.office.name)}</b><span>${esc(d.no_label)}: ${esc(d.no)} · ${esc(d.date)}</span></div>
+      <h3>${esc(d.title)}</h3>${d.sub ? `<div class="sub">${esc(d.sub)}</div>` : ''}
+      ${d.blocks.map((b) => {
+        if (b.t === 'h') return `<div class="art">${esc(b.text)}</div>`;
+        if (b.t === 'p') return `<p>${rich(b.text)}</p>`;
+        if (b.t === 'box') return `<div class="box">${b.big ? `<div class="big">${esc(b.big)}</div>` : ''}${rich(b.text)}</div>`;
+        if (b.t === 'parties') return b.items.map((x) => `<div class="box"><b>${esc(x.h)}</b><br>${rich(x.text)}</div>`).join('');
+        if (b.t === 'table') return `<table>${b.head ? `<tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>` : ''}${b.rows.map((r) => `<tr>${r.map((c, k) => (b.kv && k === 0 ? `<th>${rich(c)}</th>` : `<td>${rich(c)}</td>`)).join('')}</tr>`).join('')}</table>`;
+        return '';
+      }).join('')}
+    </div>`;
+  }
+  function signSheet(id) {
+    const p = (OF()?.pending || []).find((x) => x.id === id); if (!p) return;
+    openSheet(`توقيع ${esc(p.doc.signer)}`, `
+      <div class="card"><div class="kv"><span>${KIND[p.kind]}</span><b class="num">${esc(p.no)}</b></div><div class="kv"><span>يوقّع</span><b>${esc(p.party_name)}</b></div>${p.amount ? `<div class="kv"><span>المبلغ</span><b class="num">${fmt(p.amount)}</b></div>` : ''}</div>
+      <button class="btn btn-ghost btn-block" id="rd">${icon('receipt', 17)} قراءة النص كامل</button>
+      <div id="docbox" hidden>${docHtml(p.doc)}</div>
+      <label class="agree"><input type="checkbox" id="ag"> قرأت ${p.kind === 'debt' ? 'الإقرار' : p.kind === 'handover' ? 'المحضر' : p.kind === 'external' ? 'السند' : 'العقد'} وأوافق على ما فيه${p.kind === 'service' ? '، ومنها شروط الإلغاء والإرجاع' : ''}</label>
+      <div class="mpad"><canvas id="pad"></canvas><span>وقّع هنا بإصبعك</span></div>
+      <div class="grid2"><button class="btn btn-ghost" id="clr">مسح</button><button class="btn btn-gold" id="ok" disabled>${icon('check', 18)} توقيع وحفظ</button></div>`, (sb) => {
+      sb.querySelector('#rd').onclick = () => { const d = sb.querySelector('#docbox'); d.hidden = !d.hidden; };
+      const cv = sb.querySelector('#pad'); const r = window.devicePixelRatio || 1;
+      requestAnimationFrame(() => {
+        cv.width = cv.clientWidth * r; cv.height = cv.clientHeight * r;
+        const g = cv.getContext('2d'); g.scale(r, r); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#1b2d5b';
+        let down = false; let last = null; let has = false;
+        const pos = (e) => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+        const ok = sb.querySelector('#ok'); const ag = sb.querySelector('#ag');
+        const upd = () => { ok.disabled = !(has && ag.checked); };
+        ag.onchange = upd;
+        cv.addEventListener('pointerdown', (e) => { down = true; last = pos(e); cv.setPointerCapture(e.pointerId); e.preventDefault(); });
+        cv.addEventListener('pointermove', (e) => { if (!down) return; const q = pos(e); g.beginPath(); g.moveTo(...last); g.lineTo(...q); g.stroke(); last = q; has = true; upd(); e.preventDefault(); });
+        cv.addEventListener('pointerup', () => { down = false; });
+        sb.querySelector('#clr').onclick = () => { g.clearRect(0, 0, cv.width, cv.height); has = false; upd(); };
+        ok.onclick = () => {
+          // صورة مصغّرة للتوقيع (تُرفع مشفّرة)
+          const o = document.createElement('canvas'); const s = Math.min(1, 500 / cv.width); o.width = Math.round(cv.width * s); o.height = Math.round(cv.height * s);
+          o.getContext('2d').drawImage(cv, 0, 0, o.width, o.height);
+          sendOp('contract:sign', { id: p.id, signature: o.toDataURL('image/png'), via: 'iphone' }, `توقيع ${KIND[p.kind]} ${p.no} — ${p.party_name}`);
+        };
+      });
+    });
+  }
+
   // ═════════════ الإدارة من الآيفون: الموظفون والصلاحيات + الخدمات والأسعار ═════════════
   function adminSheet() {
     const sn = S.snap;
@@ -683,8 +901,15 @@
       <button class="action press" data-a="cash"><span class="ic">${icon('wallet', 21)}</span><b>الصندوق اليوم</b><span>الجرد والحركات مباشرة</span></button>
       <button class="action press" data-a="log"><span class="ic">${icon('clock', 21)}</span><b>سجل النشاط</b><span>كل العمليات</span></button>
     </div>`}
+    ${sn.ofc ? `<h2 class="sec" style="margin:4px 4px 0">المكتب</h2><div class="actions">
+      <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${openTx().length} مفتوحة</span></button>
+      <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المعقّبين</b><span>${fmt(sn.ofc.couriers?.totals?.open || 0)}</span></button>
+      <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${(sn.ofc.pending || []).length} بانتظار التوقيع</span></button>
+      <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>تواريخ الانتهاء</span></button>
+    </div>` : ''}
     <button class="btn btn-ghost btn-block" id="lo">${icon('logout', 17)} تسجيل الخروج</button>`, (sb) => {
       sb.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; closeSheet(true); render(); } };
+      bindOffice(sb);
       sb.querySelectorAll('[data-a]').forEach((b) => {
         b.onclick = () => ({ staff: staffSheet, svc: servicesSheet, cash: () => { closeSheet(true); S.tab = 'finance'; S.fin = 'cash'; render(); }, log: activitySheet })[b.dataset.a]();
       });
