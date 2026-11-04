@@ -771,7 +771,7 @@
         <div class="split"><div><span>اليوم: عهدة</span><b class="num">${fmt(c.today.given)}</b></div><div><span>اليوم: رجع للصندوق</span><b class="num">${fmt(c.today.returned)}</b></div></div></div>
       ${pendingRows(['courier:move']).length ? `<div class="card flush">${pendingRows(['courier:move'])}</div>` : ''}
       <div class="card flush list">${c.rows.filter((k) => k.is_active || k.balance).map((k) => `<button class="item" data-k="${k.id}"><div class="av ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${initial(k.name)}</div><div class="m"><b>${esc(k.name)}</b><span>${k.open_txns ? `${k.open_txns} معاملة مفتوحة` : 'لا معاملات مفتوحة'}</span></div><div class="e"><b class="num ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${fmt(Math.abs(k.balance))}</b><span class="chip">${k.balance > 0 ? 'عنده' : k.balance < 0 ? 'له' : 'مسوّى'}</span></div></button>`).join('') || '<div class="empty">أضف المعقّبين من برنامج المكتب</div>'}</div>
-      <div class="foot-note">العهدة تخرج من الصندوق، والوصولات تنسجّل مصروف رسوم على المعاملة، والباقي يرجع للصندوق</div>`, (sb) => {
+      <div class="foot-note">العهدة من الصندوق أو من خارجه (تختار كل مرة)، والوصولات تنسجّل مصروف رسوم على المعاملة</div>`, (sb) => {
       sb.querySelectorAll('[data-k]').forEach((b) => { b.onclick = () => courierSheet(Number(b.dataset.k)); });
     });
   }
@@ -784,25 +784,30 @@
       ${k.balance > 0 ? `<button class="btn btn-ghost btn-block" data-mv="return">${icon('cash', 17)} استلام الباقي ${fmt(k.balance)}</button>` : ''}
       ${k.phone ? `<a class="btn btn-ghost btn-block" href="tel:${esc(k.phone)}">${icon('phone', 17)} اتصال</a>` : ''}
       <h2 class="sec" style="margin:0 4px">الحركات</h2>
-      <div class="card flush">${(k.moves || []).map((m) => `<div class="item noic"><div class="m"><b>${KL[m.kind]}${m.notes ? ` — ${esc(m.notes)}` : ''}</b><span>${dayTime(m.created_at)}${m.txn_title ? ` · ${esc(m.txn_title)}` : ''}${m.receipt_no ? ` · وصل ${esc(m.receipt_no)}` : ''}</span></div><div class="e"><b class="num ${m.kind === 'give' ? 'red' : 'green'}">${m.kind === 'give' ? '' : '−'}${fmt(m.amount)}</b></div></div>`).join('') || '<div class="empty">لا توجد حركات</div>'}</div>`, (sb) => {
+      <div class="card flush">${(k.moves || []).map((m) => `<div class="item noic"><div class="m"><b>${KL[m.kind]}${m.kind !== 'receipt' && m.from_box === 0 ? ' (خارج الصندوق)' : ''}${m.notes ? ` — ${esc(m.notes)}` : ''}</b><span>${dayTime(m.created_at)}${m.txn_title ? ` · ${esc(m.txn_title)}` : ''}${m.receipt_no ? ` · وصل ${esc(m.receipt_no)}` : ''}</span></div><div class="e"><b class="num ${m.kind === 'give' ? 'red' : 'green'}">${m.kind === 'give' ? '' : '−'}${fmt(m.amount)}</b></div></div>`).join('') || '<div class="empty">لا توجد حركات</div>'}</div>`, (sb) => {
       sb.querySelectorAll('[data-mv]').forEach((b) => { b.onclick = () => courierMoveSheet(k, b.dataset.mv); });
     });
   }
   function courierMoveSheet(k, kind) {
-    const T = { give: 'إعطاء عهدة من الصندوق', receipt: 'وصل رسوم', return: 'استلام الباقي (يرجع للصندوق)' };
+    const T = { give: 'إعطاء عهدة', receipt: 'وصل رسوم', return: 'استلام الباقي' };
+    const box0 = LS.get('zm-courier-box') !== false;
     const tx = openTx();
     openSheet(T[kind], `
       ${moneyField('amount', 'المبلغ', kind === 'return' ? Math.max(0, k.balance) : 0)}
+      ${kind !== 'receipt' ? `<div class="field"><label>${kind === 'give' ? 'الفلوس منين؟' : 'الباقي وين يروح؟'}</label>${seg('box', [['1', kind === 'give' ? 'من الصندوق' : 'للصندوق'], ['0', kind === 'give' ? 'من خارجه (جيبي)' : 'استلمته أنا']], box0 ? '1' : '0')}</div>` : ''}
       ${kind !== 'return' ? `<div class="field"><label>للمعاملة (اختياري)</label><select class="input" name="txn"><option value="">—</option>${tx.map((t) => `<option value="${t.id}" ${t.courier_id === k.id ? '' : ''}>${esc(t.title)}${t.party_name ? ` — ${esc(t.party_name)}` : ''}</option>`).join('')}</select></div>` : ''}
       ${kind === 'receipt' ? '<div class="field"><label>رقم الوصل (اختياري)</label><input class="input" name="rno" inputmode="numeric"></div>' : ''}
       <div class="field"><label>${kind === 'receipt' ? 'البيان (مثال: رسوم تسجيل — دائرة التسجيل)' : 'ملاحظة (اختياري)'}</label><input class="input" name="notes"></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ — ${esc(k.name)}</button>`, (sb) => {
+      const box = bindSeg(sb, 'box');
       sb.querySelector('#ok').onclick = () => {
         const amount = mval(sb, 'amount'); if (!amount) return toast('اكتب المبلغ', true);
+        const fromBox = kind === 'receipt' ? true : (box() || (box0 ? '1' : '0')) === '1';
+        if (kind !== 'receipt') LS.set('zm-courier-box', fromBox);
         if (kind === 'return' && amount > k.balance) return toast(`أكبر مما عنده (${fmt(k.balance)})`, true);
         const notes = val(sb, 'notes'); const txn = Number(val(sb, 'txn')) || null;
         if (kind === 'receipt' && !notes && !txn) return toast('اكتب البيان أو اختر المعاملة', true);
-        sendOp('courier:move', { courier_id: k.id, kind, amount, txn_id: txn, notes, receipt_no: val(sb, 'rno') }, `${T[kind]} — ${k.name} ${fmt(amount)}`);
+        sendOp('courier:move', { courier_id: k.id, kind, amount, txn_id: txn, notes, receipt_no: val(sb, 'rno'), from_box: fromBox }, `${T[kind]}${kind === 'receipt' ? '' : fromBox ? ' (الصندوق)' : ' (خارج الصندوق)'} — ${k.name} ${fmt(amount)}`);
       };
     });
   }
