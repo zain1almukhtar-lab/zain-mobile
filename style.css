@@ -342,3 +342,13 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 .wa-bub { background: #dcf8c6; color: #111; border-radius: 12px 0 12px 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.75; white-space: pre-wrap; }
 .wa-bub b { font-weight: 900; } .wa-bub .lnk { color: #0b6aa8; direction: ltr; unicode-bidi: isolate; } .wa-bub .muted { color: #6b7c6a; }
 .wa-prev textarea { min-height: 360px; line-height: 1.7; padding-top: 10px; }
+
+/* ماليتي */
+.me-lk { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 0; text-align: center; color: var(--gold-2); }
+.me-lk b { font-size: 18px; color: var(--ink); } .me-lk span { color: var(--muted); font-size: 13px; }
+.me-sp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; position: relative; z-index: 1; }
+.me-sp div { background: rgba(0, 0, 0, .28); border-radius: 12px; padding: 8px 10px; } .me-sp span { display: block; font-size: 11px; color: var(--muted); } .me-sp b { font-size: 14px; }
+.me-row { padding: 7px 0; border-bottom: .5px solid var(--line); } .me-row:last-of-type { border: 0; }
+.me-row .h { display: flex; justify-content: space-between; font-size: 13px; } .me-row .h span { color: var(--muted); }
+.mbar { height: 6px; border-radius: 99px; background: var(--card-3); overflow: hidden; margin-top: 5px; } .mbar i { display: block; height: 100%; border-radius: 99px; }
+.me-cat .seg button { font-size: 12px; height: 38px; padding: 0 3px; }
