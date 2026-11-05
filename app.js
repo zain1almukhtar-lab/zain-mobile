@@ -844,10 +844,10 @@
     });
   }
 
-  // ═════════════ دورة المعاملة: المعاملات، عهدة المعقّبين، العقود والأقساط، التجديدات ═════════════
+  // ═════════════ دورة المعاملة: المعاملات، عهدة المحامين والأشخاص، العقود والأقساط، التجديدات ═════════════
   const OF = () => S.snap?.ofc || null;
-  const STG = [['docs', 'بانتظار الأوراق'], ['office', 'قيد الإنجاز'], ['courier', 'عند المعقّب'], ['ready', 'جاهزة'], ['delivered', 'سُلّمت']];
-  const STL = { docs: 'بانتظار الأوراق', office: 'قيد الإنجاز بالمكتب', courier: 'عند المعقّب / الدائرة', ready: 'جاهزة للتسليم', delivered: 'سُلّمت', cancelled: 'ملغاة' };
+  const STG = [['docs', 'بانتظار الأوراق'], ['office', 'قيد الإنجاز'], ['courier', 'عند المحامي'], ['ready', 'جاهزة'], ['delivered', 'سُلّمت']];
+  const STL = { docs: 'بانتظار الأوراق', office: 'قيد الإنجاز بالمكتب', courier: 'عند المحامي / الدائرة', ready: 'جاهزة للتسليم', delivered: 'سُلّمت', cancelled: 'ملغاة' };
   const daysTo = (d) => Math.round((new Date(`${d}T12:00:00`) - new Date(`${todayStr()}T12:00:00`)) / 86400000);
   const openTx = () => (OF()?.txns || []).filter((t) => ['docs', 'office', 'courier', 'ready'].includes(t.stage));
 
@@ -862,7 +862,7 @@
     return `<h2 class="sec">المكتب</h2>
       <div class="actions">
         <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${open.length} مفتوحة${late ? ` · <span class="red" style="display:inline">${late} متأخرة</span>` : ''}</span></button>
-        <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المعقّبين</b><span>${cOpen ? `عندهم ${fmt(cOpen)}` : 'مسوّاة'}</span></button>
+        <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${cOpen ? `عندهم ${fmt(cOpen)}` : 'مسوّاة'}</span></button>
         <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${pend ? `${pend} بانتظار التوقيع` : ''}${pend && od.length ? ' · ' : ''}${od.length ? `<span class="red" style="display:inline">${od.length} قسط متأخر</span>` : ''}${!pend && !od.length ? `${(o.contracts || []).length} عقد` : ''}</span></button>
         <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>${exp.length ? `${exp.length} خلال 30 يوم أو منتهية` : 'لا شيء قريب'}</span></button>
       </div>`;
@@ -906,7 +906,7 @@
         ${t.receipt_no ? `<div class="kv"><span>الفاتورة</span><b class="num">${esc(t.receipt_no)}</b></div>` : ''}
         ${t.total !== undefined && t.sale_id ? `<div class="kv"><span>المبلغ / المدفوع</span><b class="num">${fmt(t.total)} / ${fmt(t.paid)}</b></div>` : ''}
         ${t.remaining > 0 ? `<div class="kv"><span>الباقي دين</span><b class="red num">${fmt(t.remaining)}</b></div>` : ''}
-        ${t.courier_name ? `<div class="kv"><span>المعقّب</span><b>${esc(t.courier_name)}</b></div>` : ''}
+        ${t.courier_name ? `<div class="kv"><span>المحامي / الشخص</span><b>${esc(t.courier_name)}</b></div>` : ''}
         ${t.due_date ? `<div class="kv"><span>الموعد المتوقع</span><b class="${t.late ? 'red' : ''}">${dayLabel(t.due_date)}${t.late ? ` (متأخرة ${t.late_days} يوم)` : ''}</b></div>` : ''}
         <div class="kv"><span>فُتحت</span><b>${dayTime(t.created_at)}</b></div>
       </div>
@@ -930,14 +930,14 @@
     });
   }
 
-  // ───── عهدة المعقّبين ─────
+  // ───── عهدة المحامين والأشخاص ─────
   function couriersSheet() {
     const c = OF()?.couriers; if (!c) return;
-    openSheet('عهدة المعقّبين', `
-      <div class="card hero"><div class="lbl">لسه عند المعقّبين</div><div class="big"><span class="num">${fmt(c.totals.open)}</span><small>د.ع</small></div>
+    openSheet('عهدة المحامين والأشخاص', `
+      <div class="card hero"><div class="lbl">لسه عند المحامين والأشخاص</div><div class="big"><span class="num">${fmt(c.totals.open)}</span><small>د.ع</small></div>
         <div class="split"><div><span>اليوم: عهدة</span><b class="num">${fmt(c.today.given)}</b></div><div><span>اليوم: رجع للصندوق</span><b class="num">${fmt(c.today.returned)}</b></div></div></div>
       ${pendingRows(['courier:move']).length ? `<div class="card flush">${pendingRows(['courier:move'])}</div>` : ''}
-      <div class="card flush list">${c.rows.filter((k) => k.is_active || k.balance).map((k) => `<button class="item" data-k="${k.id}"><div class="av ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${initial(k.name)}</div><div class="m"><b>${esc(k.name)}</b><span>${k.open_txns ? `${k.open_txns} معاملة مفتوحة` : 'لا معاملات مفتوحة'}</span></div><div class="e"><b class="num ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${fmt(Math.abs(k.balance))}</b><span class="chip">${k.balance > 0 ? 'عنده' : k.balance < 0 ? 'له' : 'مسوّى'}</span></div></button>`).join('') || '<div class="empty">أضف المعقّبين من برنامج المكتب</div>'}</div>
+      <div class="card flush list">${c.rows.filter((k) => k.is_active || k.balance).map((k) => `<button class="item" data-k="${k.id}"><div class="av ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${initial(k.name)}</div><div class="m"><b>${esc(k.name)}</b><span>${k.kind ? `${esc(k.kind)} · ` : ''}${k.open_txns ? `${k.open_txns} معاملة مفتوحة` : 'لا معاملات مفتوحة'}</span></div><div class="e"><b class="num ${k.balance > 0 ? 'amber' : k.balance < 0 ? 'red' : 'green'}">${fmt(Math.abs(k.balance))}</b><span class="chip">${k.balance > 0 ? 'عنده' : k.balance < 0 ? 'له' : 'مسوّى'}</span></div></button>`).join('') || '<div class="empty">أضف المحامين والأشخاص من برنامج المكتب</div>'}</div>
       <div class="foot-note">العهدة من الصندوق أو من خارجه (تختار كل مرة)، والوصولات تنسجّل مصروف رسوم على المعاملة</div>`, (sb) => {
       sb.querySelectorAll('[data-k]').forEach((b) => { b.onclick = () => courierSheet(Number(b.dataset.k)); });
     });
@@ -1147,7 +1147,7 @@
     </div>`}
     ${sn.ofc ? `<h2 class="sec" style="margin:4px 4px 0">المكتب</h2><div class="actions">
       <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${openTx().length} مفتوحة</span></button>
-      <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المعقّبين</b><span>${fmt(sn.ofc.couriers?.totals?.open || 0)}</span></button>
+      <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${fmt(sn.ofc.couriers?.totals?.open || 0)}</span></button>
       <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${(sn.ofc.pending || []).length} بانتظار التوقيع</span></button>
       <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>تواريخ الانتهاء</span></button>
     </div>` : ''}
