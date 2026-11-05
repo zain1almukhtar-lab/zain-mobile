@@ -868,7 +868,7 @@
       </div>`;
   }
   function bindOffice(root) {
-    root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet, sal: salPaySheet, dep: depositSheet, owes: owesSheet })[b.dataset.ofc](); });
+    root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet, sal: salPaySheet, dep: depositSheet, owes: owesSheet, abs: absSheet })[b.dataset.ofc](); });
   }
 
   // ───── المعاملات ─────
@@ -1147,10 +1147,12 @@
     const L = S.snap.sal; if (!L) return toast('حدّث برنامج المكتب على الحاسبة الرئيسية', true);
     const staff = L.staff.filter((u) => u.is_active);
     const box = Math.max(0, L.box || 0);
+    const base = (u) => u.salary || u.last?.amount || 0;
     openSheet('صرف الرواتب', `
       ${pendingRows(['sal:pay'])}
-      <div class="card flush">${staff.map((u) => `<label class="item noic" style="gap:8px"><input type="checkbox" data-u="${u.id}" ${u.due ? 'checked' : ''} style="width:22px;height:22px"><div class="m"><b>${esc(u.full_name)}</b><span>${u.salary_period === 'monthly' ? 'شهري' : 'أسبوعي'}${u.last ? ` · آخر راتب ${u.last.day}` : ''}</span></div>
-        <div class="money-in" style="width:150px"><input class="input" style="font-size:15px;padding-left:50px" data-a="${u.id}" inputmode="numeric" data-money value="${fmt(u.salary || u.last?.amount || 0)}"><span>د.ع</span></div></label>`).join('') || '<div class="empty">ما عندك موظفين</div>'}</div>
+      <div class="card flush">${staff.map((u) => `<label class="item noic" style="gap:8px;flex-wrap:wrap"><input type="checkbox" data-u="${u.id}" ${u.due ? 'checked' : ''} style="width:22px;height:22px"><div class="m"><b>${esc(u.full_name)}</b><span>${u.salary_period === 'monthly' ? 'شهري' : 'أسبوعي'} · الراتب ${fmt(base(u))}${u.last ? ` · آخر راتب ${u.last.day}` : ''}</span>
+        ${(u.pending || []).map((a) => `<div class="ded"><input type="checkbox" data-d="${a.id}" data-du="${u.id}" checked><b class="red">− ${fmt(a.deduct)}</b><i>${esc(L.abs?.[a.kind] || '')} ${a.date_from.slice(5)}${a.notes ? ` · ${esc(a.notes)}` : ''}</i></div>`).join('')}</div>
+        <div class="money-in" style="width:150px"><input class="input" style="font-size:15px;padding-left:50px" data-a="${u.id}" inputmode="numeric" data-money value="${fmt(Math.max(0, base(u) - (u.pending || []).reduce((t, a) => t + a.deduct, 0)))}"><span>د.ع</span></div></label>`).join('') || '<div class="empty">ما عندك موظفين</div>'}</div>
       <div class="kpis" style="margin:10px 0"><div class="kpi"><div class="l">المجموع</div><div class="v" id="tt">0</div></div><div class="kpi"><div class="l">بالصندوق (آخر مزامنة)</div><div class="v">${fmt(box)}</div></div></div>
       ${moneyField('bx', 'من صندوق المكتب')}
       <div class="note" id="ow"></div>
@@ -1158,7 +1160,15 @@
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} صرف الرواتب</button>`, (sb) => {
       const od = bindSeg(sb, 'od');
       let touched = false;
-      const items = () => staff.filter((u) => sb.querySelector(`[data-u="${u.id}"]`).checked).map((u) => ({ user_id: u.id, name: u.full_name, amount: parseMoney(sb.querySelector(`[data-a="${u.id}"]`).value) })).filter((x) => x.amount > 0);
+      const ded = (u) => [...sb.querySelectorAll(`[data-du="${u.id}"]`)];
+      // علامة الخصم: شيلها ← مسامَح، والراتب يتحدّث
+      sb.querySelectorAll('[data-d]').forEach((c) => c.addEventListener('change', () => {
+        const u = staff.find((x) => x.id === Number(c.dataset.du));
+        const pend = u.pending.filter((a) => sb.querySelector(`[data-d="${a.id}"]`).checked).reduce((t, a) => t + a.deduct, 0);
+        sb.querySelector(`[data-a="${u.id}"]`).value = fmt(Math.max(0, base(u) - pend));
+      }));
+      const items = () => staff.filter((u) => sb.querySelector(`[data-u="${u.id}"]`).checked).map((u) => ({ user_id: u.id, name: u.full_name, amount: parseMoney(sb.querySelector(`[data-a="${u.id}"]`).value),
+        apply: ded(u).filter((c) => c.checked).map((c) => Number(c.dataset.d)), waive: ded(u).filter((c) => !c.checked).map((c) => Number(c.dataset.d)) })).filter((x) => x.amount > 0);
       const calc = () => {
         const it = items(); const total = it.reduce((a, x) => a + x.amount, 0);
         const bxEl = sb.querySelector('[name=bx]');
@@ -1173,7 +1183,43 @@
       sb.querySelector('#ok').onclick = () => {
         const { it, total, fromBox } = calc();
         if (!it.length) return toast('اختر موظفاً', true);
-        sendOp('sal:pay', { items: it.map(({ user_id, amount }) => ({ user_id, amount })), box_amount: fromBox, owed: od() !== '0' }, `رواتب ${fmt(total)}: ${it.map((x) => x.name).join('، ')}${total - fromBox ? ` (من جيبك ${fmt(total - fromBox)})` : ''}`);
+        sendOp('sal:pay', { items: it.map(({ user_id, amount, apply, waive }) => ({ user_id, amount, apply, waive })), box_amount: fromBox, owed: od() !== '0' }, `رواتب ${fmt(total)}: ${it.map((x) => x.name).join('، ')}${total - fromBox ? ` (من جيبك ${fmt(total - fromBox)})` : ''}`);
+      };
+    });
+  }
+  function absSheet() {
+    const L = S.snap.sal; if (!L?.abs) return toast('حدّث برنامج المكتب على الحاسبة الرئيسية', true);
+    const staff = L.staff.filter((u) => u.is_active);
+    if (!staff.length) return toast('ما عندك موظفين', true);
+    const t = todayStr();
+    openSheet('تسجيل غياب / إجازة', `
+      ${pendingRows(['abs:save'])}
+      <div class="field"><label>الموظف</label><select class="input" name="u">${staff.map((u) => `<option value="${u.id}">${esc(u.full_name)}</option>`).join('')}</select></div>
+      <div class="field"><label>النوع</label>${seg('k', [['absent', 'غياب'], ['leave', 'إجازة'], ['sick', 'مرضية'], ['late', 'تأخير']], 'absent')}</div>
+      <div class="grid2"><div class="field"><label>من</label><input class="input" type="date" name="f" value="${t}"></div><div class="field" id="tof"><label>إلى</label><input class="input" type="date" name="t" value="${t}"></div></div>
+      <div class="field"><label>الخصم — قرارك إنت</label>${seg('m', [['none', 'بدون'], ['days', 'بالأيام'], ['amount', 'مبلغ']], 'none')}</div>
+      <div id="amt" style="display:none">${moneyField('a', 'مبلغ الخصم')}</div>
+      <div class="note" id="inf"></div>
+      <div class="field"><label>ملاحظة (اختياري)</label><input class="input" name="no"></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} تسجيل</button>`, (sb) => {
+      let kind = 'absent'; let mode = 'none';
+      const info = () => {
+        const u = staff.find((x) => x.id === Number(val(sb, 'u')));
+        const f = val(sb, 'f'); const to = kind === 'late' ? f : val(sb, 't');
+        const n = kind === 'late' ? 0 : Math.max(0, Math.round((new Date(`${to}T12:00:00`) - new Date(`${f}T12:00:00`)) / 86400000) + 1);
+        sb.querySelector('#tof').style.display = kind === 'late' ? 'none' : '';
+        sb.querySelector('#amt').style.display = mode === 'amount' ? '' : 'none';
+        sb.querySelector('#inf').textContent = mode === 'days' ? (n ? `${n} ${n === 1 ? 'يوم' : 'أيام'} × اليومية ${fmt(u.day_rate || 0)} = ${fmt(n * (u.day_rate || 0))} — ينخصم بالراتب الجاي` : 'التأخير يُخصم بمبلغ') : mode === 'amount' ? 'ينخصم بالراتب الجاي — وتكدر تسامحه وقت الصرف' : 'بدون خصم — ينسجّل للعلم بس';
+      };
+      bindSeg(sb, 'k', (v) => { kind = v; info(); }); bindSeg(sb, 'm', (v) => { mode = v; info(); });
+      sb.addEventListener('change', info); info();
+      sb.querySelector('#ok').onclick = () => {
+        const f = val(sb, 'f'); const to = kind === 'late' ? f : val(sb, 't');
+        if (!f || to < f) return toast('التاريخ غير صحيح', true);
+        if (mode === 'amount' && !mval(sb, 'a')) return toast('اكتب مبلغ الخصم', true);
+        if (mode === 'days' && kind === 'late') return toast('التأخير يُخصم بمبلغ', true);
+        const u = staff.find((x) => x.id === Number(val(sb, 'u')));
+        sendOp('abs:save', { user_id: u.id, kind, from: f, to, mode, amount: mval(sb, 'a'), notes: val(sb, 'no') }, `${L.abs[kind]} ${u.full_name} ${f}${mode === 'none' ? ' — بدون خصم' : ''}`);
       };
     });
   }
@@ -1229,6 +1275,7 @@
       <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${(sn.ofc.pending || []).length} بانتظار التوقيع</span></button>
       <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>تواريخ الانتهاء</span></button>
       ${sn.sal ? `<button class="action press" data-ofc="sal"><span class="ic">${icon('users', 21)}</span><b>صرف الرواتب</b><span>${sn.sal.dueToday ? `اليوم ${fmt(sn.sal.dueToday.total)}` : 'الموظفين'}</span></button>
+      <button class="action press" data-ofc="abs"><span class="ic">${icon('task', 21)}</span><b>غياب / إجازة</b><span>${sn.sal.staff.reduce((t, u) => t + (u.pending || []).length, 0) ? `خصومات تنتظر الراتب` : 'تسجيل للموظفين'}</span></button>
       <button class="action press" data-ofc="dep"><span class="ic">${icon('plus', 21)}</span><b>حطيت فلوس من عندي</b><span>${sn.sal.owed ? `المكتب مدين إلك ${fmt(sn.sal.owed)}` : 'إيداع بالصندوق'}</span></button>` : ''}
     </div>` : ''}
     <button class="btn btn-ghost btn-block" id="lo">${icon('logout', 17)} تسجيل الخروج</button>`, (sb) => {
