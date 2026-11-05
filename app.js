@@ -859,7 +859,7 @@
     const od = (o.installments || []).filter((x) => x.status === 'overdue');
     const pend = (o.pending || []).length;
     const exp = (o.expiries || []).filter((e) => daysTo(e.expires_on) <= 30 && daysTo(e.expires_on) >= -60);
-    return `<h2 class="sec">المكتب</h2>
+    return `${salBanner()}<h2 class="sec">المكتب</h2>
       <div class="actions">
         <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${open.length} مفتوحة${late ? ` · <span class="red" style="display:inline">${late} متأخرة</span>` : ''}</span></button>
         <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${cOpen ? `عندهم ${fmt(cOpen)}` : 'مسوّاة'}</span></button>
@@ -868,7 +868,7 @@
       </div>`;
   }
   function bindOffice(root) {
-    root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet })[b.dataset.ofc](); });
+    root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet, sal: salPaySheet, dep: depositSheet, owes: owesSheet })[b.dataset.ofc](); });
   }
 
   // ───── المعاملات ─────
@@ -1094,7 +1094,8 @@
         <div class="me-sp"><div><span>سحبت من المكتب</span><b>${fmt(m.withdraw)}</b></div><div><span>مصاريفك</span><b class="red">${fmt(m.expense)}</b></div>
         <div><span>أقساط ديون</span><b>${fmt(m.debtPay)}</b></div><div><span>${m.forecast ? `نهاية الشهر (${m.forecast.daysLeft} يوم)` : 'ادّخرت'}</span><b dir="ltr" style="display:inline-block" class="${m.forecast && m.forecast.left < 0 ? 'red' : 'green'}">${fmt(m.forecast ? m.forecast.left : m.saved)}</b></div></div></div>
       <div class="grid2" style="margin-bottom:10px"><button class="btn btn-gold" id="ex">${icon('plus', 17)} مصروف</button><button class="btn btn-ghost" id="wd">${icon('wallet', 17)} سحب</button></div>
-      ${pendingRows(['me:move', 'me:moveDelete'])}
+      ${pendingRows(['me:move', 'me:moveDelete', 'owner:back'])}
+      ${m.officeOwes ? `<button class="card item noic press" data-ofc="owes" style="width:100%;margin-bottom:10px"><div class="m"><b>المكتب مدين إلك</b><span>إكمال رواتب وإيداعات من جيبك — اضغط للاسترجاع</span></div><div class="e"><b class="gold num">${fmt(m.officeOwes)}</b></div></button>` : ''}
       ${cats.length ? `<h2 class="sec" style="margin:4px 4px 0">ميزانيتك</h2><div class="card">${cats.map((c) => { const sp = m.byCat[c] || 0; const b = bud[c] || 0; const over = b && sp > b;
         return `<div class="me-row"><div class="h"><b>${esc(c)}</b><span><b class="${over ? 'red' : ''}">${fmt(sp)}</b>${b ? ` / ${fmt(b)}` : ''}</span></div>${bar(b ? (sp / b) * 100 : 100, over ? 'var(--red)' : 'var(--gold)')}</div>`; }).join('')}</div>` : ''}
       <h2 class="sec" style="margin:4px 4px 0">المكتب — الربح أولاً</h2>
@@ -1108,6 +1109,7 @@
       </div>
       ${m.moves.length ? `<h2 class="sec" style="margin:4px 4px 0">حركاتك</h2><div class="card flush">${m.moves.slice(0, 15).map((x) => `<div class="item noic"><div class="m"><b>${esc(x.category || x.debt_name || ({ withdraw: x.from_box ? 'سحب من الصندوق' : 'سحب من خارج الصندوق', reserve_in: 'إيداع بالاحتياطي', reserve_out: 'سحب من الاحتياطي' })[x.kind] || '')}</b><span>${esc(x.notes || '')} ${x.day || ''}</span></div><div class="e"><b>${fmt(x.amount)}</b></div></div>`).join('')}</div>` : ''}
       <div class="foot-note">الإعدادات والديون والتوزيع من برنامج المكتب</div>`, (sb) => {
+      bindOffice(sb);
       sb.querySelector('#ex').onclick = () => meMoveSheet('expense');
       sb.querySelector('#wd').onclick = () => meMoveSheet('withdraw');
     });
@@ -1134,6 +1136,82 @@
     });
   }
 
+  // ═════════════ الرواتب وفلوس المدير على المكتب (S.snap.sal) ═════════════
+  function salBanner() {
+    const D = S.snap?.sal?.dueToday;
+    if (!D || pendingOf(['sal:pay']).length) return '';
+    return `<button class="card press sal-al" data-ofc="sal"><div class="m"><b>💵 اليوم يوم الرواتب — ${D.day}</b><span>${D.due.map((x) => `${esc(x.name)} ${fmt(x.amount)}`).join(' · ')}</span>
+      ${D.short ? `<span class="red" style="font-weight:800">⚠️ بالصندوق ${fmt(D.box)} بس — ينقص ${fmt(D.short)}</span>` : ''}</div><span class="chip gold">صرف</span></button>`;
+  }
+  function salPaySheet() {
+    const L = S.snap.sal; if (!L) return toast('حدّث برنامج المكتب على الحاسبة الرئيسية', true);
+    const staff = L.staff.filter((u) => u.is_active);
+    const box = Math.max(0, L.box || 0);
+    openSheet('صرف الرواتب', `
+      ${pendingRows(['sal:pay'])}
+      <div class="card flush">${staff.map((u) => `<label class="item noic" style="gap:8px"><input type="checkbox" data-u="${u.id}" ${u.due ? 'checked' : ''} style="width:22px;height:22px"><div class="m"><b>${esc(u.full_name)}</b><span>${u.salary_period === 'monthly' ? 'شهري' : 'أسبوعي'}${u.last ? ` · آخر راتب ${u.last.day}` : ''}</span></div>
+        <div class="money-in" style="width:150px"><input class="input" style="font-size:15px;padding-left:50px" data-a="${u.id}" inputmode="numeric" data-money value="${fmt(u.salary || u.last?.amount || 0)}"><span>د.ع</span></div></label>`).join('') || '<div class="empty">ما عندك موظفين</div>'}</div>
+      <div class="kpis" style="margin:10px 0"><div class="kpi"><div class="l">المجموع</div><div class="v" id="tt">0</div></div><div class="kpi"><div class="l">بالصندوق (آخر مزامنة)</div><div class="v">${fmt(box)}</div></div></div>
+      ${moneyField('bx', 'من صندوق المكتب')}
+      <div class="note" id="ow"></div>
+      <div class="field"><label>اللي من عندي</label>${seg('od', [['1', 'دين — يرجعلي'], ['0', 'هدية — ما يرجع']], '1')}</div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} صرف الرواتب</button>`, (sb) => {
+      const od = bindSeg(sb, 'od');
+      let touched = false;
+      const items = () => staff.filter((u) => sb.querySelector(`[data-u="${u.id}"]`).checked).map((u) => ({ user_id: u.id, name: u.full_name, amount: parseMoney(sb.querySelector(`[data-a="${u.id}"]`).value) })).filter((x) => x.amount > 0);
+      const calc = () => {
+        const it = items(); const total = it.reduce((a, x) => a + x.amount, 0);
+        const bxEl = sb.querySelector('[name=bx]');
+        if (!touched) bxEl.value = fmt(Math.min(box, total));
+        const fromBox = Math.min(total, parseMoney(bxEl.value));
+        sb.querySelector('#tt').textContent = fmt(total);
+        sb.querySelector('#ow').innerHTML = total ? `من الصندوق <b>${fmt(fromBox)}</b> + أكمّله من عندي <b>${fmt(total - fromBox)}</b>` : 'اختر الموظفين';
+        return { it, total, fromBox };
+      };
+      sb.querySelector('[name=bx]').addEventListener('input', () => { touched = true; calc(); });
+      sb.addEventListener('input', calc); sb.addEventListener('change', calc); calc();
+      sb.querySelector('#ok').onclick = () => {
+        const { it, total, fromBox } = calc();
+        if (!it.length) return toast('اختر موظفاً', true);
+        sendOp('sal:pay', { items: it.map(({ user_id, amount }) => ({ user_id, amount })), box_amount: fromBox, owed: od() !== '0' }, `رواتب ${fmt(total)}: ${it.map((x) => x.name).join('، ')}${total - fromBox ? ` (من جيبك ${fmt(total - fromBox)})` : ''}`);
+      };
+    });
+  }
+  function depositSheet() {
+    const R = S.snap.sal?.reasons || ['إكمال رواتب', 'إيجار', 'عهدة محامي', 'فكّة / صرف', 'أخرى'];
+    openSheet('حطيت فلوس بالصندوق من عندي', `
+      ${moneyField('amt', 'المبلغ')}
+      <div class="field"><label>ليش؟</label>${seg('rs', R.slice(0, 3).map((r) => [r, r]), R[0])}<div style="height:6px"></div>${seg('rs2', R.slice(3).map((r) => [r, r]), '')}</div>
+      <div class="field"><label>ملاحظة (اختياري)</label><input class="input" name="no"></div>
+      <div class="field">${seg('od', [['1', 'دين — يرجعلي'], ['0', 'هدية — ما يرجع']], '1')}</div>
+      <div class="note">يدخل جرد الصندوق اليوم — وما ينحسب دخل للمكتب ولا ربح.</div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} تسجيل الإيداع</button>`, (sb) => {
+      let reason = R[0];
+      bindSeg(sb, 'rs', (v) => { reason = v; sb.querySelectorAll('[data-seg="rs2"] button').forEach((b) => b.classList.remove('on')); });
+      bindSeg(sb, 'rs2', (v) => { reason = v; sb.querySelectorAll('[data-seg="rs"] button').forEach((b) => b.classList.remove('on')); });
+      const od = bindSeg(sb, 'od');
+      sb.querySelector('#ok').onclick = () => {
+        const amount = mval(sb, 'amt'); if (!amount) return toast('اكتب المبلغ', true);
+        sendOp('owner:deposit', { amount, reason, notes: val(sb, 'no'), owed: od() !== '0' }, `حطيت ${fmt(amount)} بالصندوق — ${reason}`);
+      };
+    });
+  }
+  function owesSheet() {
+    const L = S.snap.sal; const o = L?.owed || 0;
+    if (!o) return toast('المكتب ما مدين إلك بشي');
+    openSheet('المكتب مدين إلك', `
+      <div class="card hero"><div class="lbl">اللي حطيته من جيبك وما رجعلك</div><div class="big">${fmt(o)}<small>د.ع</small></div></div>
+      <div class="card flush">${(L.moves || []).slice(0, 12).map((x) => `<div class="item noic"><div class="m"><b>${x.kind === 'back' ? 'استرجعت من الصندوق' : x.kind === 'paid' ? `إكمال راتب ${esc(x.employee || x.notes || '')}` : `إيداع — ${esc(x.reason || '')}`}</b><span>${x.day}${!x.owed && x.kind !== 'back' ? ' · هدية' : ''}</span></div><div class="e"><b class="num ${x.kind === 'back' ? 'green' : 'gold'}">${x.kind === 'back' ? '−' : ''}${fmt(x.amount)}</b></div></div>`).join('')}</div>
+      ${moneyField('amt', 'أسترجع من الصندوق', Math.min(o, Math.max(0, L.box || 0)))}
+      <button class="btn btn-gold btn-block" id="ok">${icon('undo', 18)} استرجاع من الصندوق</button>`, (sb) => {
+      sb.querySelector('#ok').onclick = () => {
+        const amount = mval(sb, 'amt'); if (!amount) return toast('اكتب المبلغ', true);
+        if (amount > o) return toast(`المكتب مدين إلك ${fmt(o)} بس`, true);
+        sendOp('owner:back', { amount }, `استرجعت ${fmt(amount)} من الصندوق`);
+      };
+    });
+  }
+
   // ═════════════ الإدارة من الآيفون: الموظفون والصلاحيات + الخدمات والأسعار ═════════════
   function adminSheet() {
     const sn = S.snap;
@@ -1150,6 +1228,8 @@
       <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${fmt(sn.ofc.couriers?.totals?.open || 0)}</span></button>
       <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${(sn.ofc.pending || []).length} بانتظار التوقيع</span></button>
       <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>تواريخ الانتهاء</span></button>
+      ${sn.sal ? `<button class="action press" data-ofc="sal"><span class="ic">${icon('users', 21)}</span><b>صرف الرواتب</b><span>${sn.sal.dueToday ? `اليوم ${fmt(sn.sal.dueToday.total)}` : 'الموظفين'}</span></button>
+      <button class="action press" data-ofc="dep"><span class="ic">${icon('plus', 21)}</span><b>حطيت فلوس من عندي</b><span>${sn.sal.owed ? `المكتب مدين إلك ${fmt(sn.sal.owed)}` : 'إيداع بالصندوق'}</span></button>` : ''}
     </div>` : ''}
     <button class="btn btn-ghost btn-block" id="lo">${icon('logout', 17)} تسجيل الخروج</button>`, (sb) => {
       sb.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; closeSheet(true); render(); } };
