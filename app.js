@@ -501,6 +501,8 @@
     if (pend) out.push({ c: 'var(--amber)', b: `${pend} ${pend > 1 ? 'عقود' : 'عقد'} بانتظار التوقيع`, s: 'الزبون يوقّع بإصبعه هنا', go: 'توقيع', a: 'contracts' });
     const exp = (o?.expiries || []).filter((e) => daysTo(e.expires_on) <= 7 && daysTo(e.expires_on) >= -30);
     if (exp.length) out.push({ c: 'var(--amber)', b: `${exp.length} ${exp.length > 1 ? 'تجديدات' : 'تجديد'} خلال أسبوع أو منتهية`, s: exp.slice(0, 2).map((e) => esc(e.title)).join('، '), go: 'تذكير', a: 'expiries' });
+    const ct = S.snap.cashToday;
+    if (ct && ct.day === todayStr() && !ct.closing && new Date().getHours() >= 15 && !pendingOf(['cash:close']).length) out.push({ c: 'var(--amber)', b: 'الصندوق ما انجرد اليوم', s: `المفروض كاش ${nm(ct.expected)}`, go: 'جرد', a: 'jrd' });
     const tasks = (S.snap.tasks || []).filter((t) => t.due_date <= todayStr());
     if (tasks.length) out.push({ c: 'var(--blue)', b: `${tasks.length} ${tasks.length > 1 ? 'أعمال' : 'عمل'} اليوم والمتأخرة`, s: esc(tasks[0].title), go: 'عرض', a: 'tasks' });
     const pAbs = (S.snap.sal?.staff || []).reduce((t, u) => t + (u.pending || []).length, 0);
@@ -510,7 +512,7 @@
   function goAction(a) {
     if (a.startsWith('tx:')) return txnSheet(Number(a.slice(3)));
     if (a.startsWith('add:')) return addAction(a.slice(4));
-    ({ sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
+    ({ jrd: cashCloseSheet, sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
   }
   function tabToday() {
     const sn = S.snap; const now = new Date();
@@ -1769,6 +1771,8 @@
     const c = S.snap.cashToday;
     const today = c ? `<h2 class="sec">الصندوق اليوم</h2>
       <div class="kpis">${kpi('المفروض بالصندوق', `<span class="gold">${money(c.expected)}</span>`, `كاش ${fmt(c.cashIn + (c.swapIn || 0))} − مصاريف ${fmt(c.spendOut)} − لعملاء ${fmt(c.cashOut)}`, 'wide')}${kpi('كي كارد اليوم', money(c.qiIn), `${c.moves} حركة`)}${kpi('الجرد', c.closing ? (c.closing.difference || c.closing.qi_difference ? '<span class="red">بيه فرق</span>' : '<span class="green">مطابق</span>') : '<span class="muted">لم يُجرد</span>', c.closing ? `${esc(c.closing.closed_by_name)} · ${c.closing.difference ? `كاش ${c.closing.difference > 0 ? '+' : ''}${fmt(c.closing.difference)}` : 'كاش مطابق'}` : '')}</div>
+      ${pendingRows(['cash:close'])}
+      ${c.day === todayStr() && !pendingOf(['cash:close']).length ? `<button class="btn ${c.closing ? 'btn-ghost' : 'btn-gold'} btn-block" id="jrd">${icon('cash', 18)} ${c.closing ? 'إعادة جرد اليوم' : 'جرد الصندوق اليوم'}</button>` : ''}
       ${c.closing && (c.closing.reason || c.closing.qi_reason) ? `<div class="note">السبب: ${esc([c.closing.reason, c.closing.qi_reason].filter(Boolean).join(' / '))}</div>` : ''}
       ${(c.employees || []).length ? `<div class="card flush list">${c.employees.map((e) => `<div class="item noic"><div class="m"><b>${esc(e.full_name)}</b><span>${e.count} فاتورة · كاش ${fmt(e.cash)} · كي كارد ${fmt(e.qi)}</span></div><div class="e"><b class="num">${fmt(e.total)}</b></div></div>`).join('')}</div>` : ''}
       ${(c.spends || []).length || (c.swaps || []).length ? `<div class="card flush list">${(c.spends || []).map((e) => `<div class="item noic"><div class="m"><b>مصروف: ${esc(e.category)}</b><span>${esc(e.by_name)}${e.notes ? ` · ${esc(e.notes)}` : ''}</span></div><div class="e"><b class="red num">−${fmt(e.amount)}</b><button class="chip red" data-spdel="${e.id}">${icon('trash', 12)}</button></div></div>`).join('')}
@@ -1776,6 +1780,7 @@
       <h2 class="sec">سجل الجرد</h2>` : '';
     setTimeout(() => {
       const m = $app.querySelector('#main'); if (!m) return;
+      m.querySelector('#jrd')?.addEventListener('click', cashCloseSheet);
       m.querySelectorAll('[data-spdel]').forEach((b) => { b.onclick = () => { if (confirm('حذف هذا المصروف من الصندوق؟')) sendOp('cash:spendDelete', { id: Number(b.dataset.spdel) }, 'حذف مصروف من الصندوق'); }; });
       m.querySelectorAll('[data-swdel]').forEach((b) => { b.onclick = () => { if (confirm('حذف عملية الكي كارد مقابل كاش؟')) sendOp('cash:swapDelete', { id: Number(b.dataset.swdel) }, 'حذف كي كارد مقابل كاش'); }; });
     });
@@ -1792,6 +1797,35 @@
       <div class="foot-note">جرد الصندوق (الكاش والكي كارد) يتم من برنامج المكتب — صفحة الصندوق</div>`;
   }
 
+  // جرد الصندوق من الآيفون: تعدّ الكاش وتطابق الكي كارد مع تقرير الجهاز
+  function cashCloseSheet() {
+    const c = S.snap.cashToday; if (!c) return toast('حدّث برنامج المكتب على الحاسبة الرئيسية', true);
+    openSheet('جرد الصندوق اليوم', `
+      <div class="kpis">${kpi('المفروض كاش', `<span class="gold">${money(c.expected)}</span>`)}${kpi('الكي كارد المسجّل', money(c.qiIn))}</div>
+      <div class="note">الأرقام حسب آخر مزامنة (${ago(S.snap.at)}). إذا انقطعت فاتورة بعدها، برنامج المكتب يحسب الجرد على الرقم الصحيح ويطلب السبب إذا اكو فرق.</div>
+      ${moneyField('cnt', 'الكاش المعدود فعلياً بالصندوق')}
+      <div class="field" id="rw" hidden><label id="rl">سبب الفرق</label><input class="input" name="rs" placeholder="مثال: صرفنا أجور نقل من الصندوق"></div>
+      ${moneyField('qi', 'مجموع الكي كارد حسب جهاز الدفع', c.qiIn)}
+      <div class="field" id="qw" hidden><label id="ql">سبب فرق الكي كارد</label><input class="input" name="qr"></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ الجرد</button>`, (sb) => {
+      const upd = () => {
+        const d1 = mval(sb, 'cnt') - c.expected; const d2 = mval(sb, 'qi') - c.qiIn;
+        const touched = (sb.querySelector('[name=cnt]').value || '').trim() !== '';
+        sb.querySelector('#rw').hidden = !(touched && d1); sb.querySelector('#qw').hidden = !d2;
+        sb.querySelector('#rl').textContent = d1 > 0 ? `زيادة ${fmt(d1)} — شنو السبب؟` : `نقص ${fmt(-d1)} — شنو السبب؟`;
+        sb.querySelector('#ql').textContent = d2 > 0 ? `الجهاز أكثر بـ ${fmt(d2)} — السبب؟` : `الجهاز أقل بـ ${fmt(-d2)} — السبب؟`;
+        return { d1, d2, touched };
+      };
+      sb.addEventListener('input', upd); upd();
+      sb.querySelector('#ok').onclick = () => {
+        const { d1, d2, touched } = upd();
+        if (!touched) return toast('اكتب الكاش المعدود', true);
+        if (d1 && !val(sb, 'rs')) return toast('اكتب سبب فرق الكاش', true);
+        if (d2 && !val(sb, 'qr')) return toast('اكتب سبب فرق الكي كارد', true);
+        sendOp('cash:close', { counted: mval(sb, 'cnt'), reason: val(sb, 'rs'), counted_qi: mval(sb, 'qi'), qi_reason: val(sb, 'qr'), day: c.day }, `جرد الصندوق ${c.day}${d1 ? ` — ${d1 > 0 ? 'زيادة' : 'نقص'} ${fmt(Math.abs(d1))}` : ' — مطابق'}`);
+      };
+    });
+  }
   function expenseSheet(id = null) {
     const x = id ? S.snap.expenses.find((e) => String(e.id) === String(id)) : null;
     const cats = S.snap.categories?.length ? S.snap.categories : ['إيجار', 'رواتب', 'كهرباء', 'إنترنت', 'قرطاسية', 'ضيافة', 'نقل'];
@@ -2075,13 +2109,13 @@
     ['inv', 'receipt', 'فاتورة'], ['debt', 'cash', 'تسديد دين'], ['exp', 'wallet', 'مصروف'],
     ['req', 'chat', 'إرسال متطلبات'], ['task', 'task', 'عمل لموظف'], ['swap', 'card', 'كي كارد بكاش'],
     ['sal', 'users', 'صرف رواتب'], ['abs', 'clock', 'غياب / إجازة'], ['dep', 'hand', 'إيداع من جيبي'],
-    ['courier', 'building', 'عهدة لمحامي'], ['client', 'userPlus', 'عميل جديد'], ['ext', 'up', 'مدخول خارجي'],
+    ['courier', 'building', 'عهدة لمحامي'], ['client', 'userPlus', 'عميل جديد'], ['jrd', 'cash', 'جرد الصندوق'],
   ];
   function addAction(k) {
     LS.set('zm-recent', [k, ...(LS.get('zm-recent') || []).filter((x) => x !== k)].slice(0, 3));
     ({
       inv: () => invoiceForm(), exp: () => expenseSheet(), req: () => reqSheet(), task: () => taskSheet(), swap: () => swapSheet(), client: () => clientForm(), ext: () => externalSheet(),
-      sal: salPaySheet, abs: absSheet, dep: depositSheet, courier: couriersSheet,
+      sal: salPaySheet, abs: absSheet, dep: depositSheet, courier: couriersSheet, jrd: cashCloseSheet,
       debt: () => { S.tab = 'office'; S.oseg = 'clients'; closeSheet(true); render(); toast('اختر العميل ثم «دفعة»'); },
     })[k]?.();
   }
