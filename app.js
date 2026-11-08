@@ -68,6 +68,8 @@
     userPlus: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', building: '<path d="M5 21V4h10v17M15 9h4v12M9 8h2M9 12h2M9 16h2"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>', eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
     hand: '<path d="M7 11V6a2 2 0 0 1 4 0v4M11 10V4a2 2 0 0 1 4 0v6M15 10V6a2 2 0 0 1 4 0v8a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3l-2-4a2 2 0 0 1 3-2l1 2"/>',
   };
   const icon = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`;
@@ -138,7 +140,7 @@
   // ═════════════ الحالة ═════════════
   const S = {
     snap: null, offline: false, loading: false, error: null, user: null,
-    tab: 'home', fin: 'days', month: null, expMonth: null, year: null,
+    tab: 'today', fin: 'cash', oseg: 'txns', txf: 'open', gq: '', month: null, expMonth: null, year: null,
     invDay: null, q: '', cq: '',
   };
 
@@ -354,7 +356,7 @@
   }
 
   // ═════════════ الهيكل ═════════════
-  const TABS = [['home', 'الرئيسية', 'home'], ['invoices', 'الفواتير', 'receipt'], ['add', '', 'plus'], ['clients', 'العملاء', 'users'], ['finance', 'المالية', 'wallet']];
+  const TABS = [['today', 'اليوم', 'home'], ['office', 'المكتب', 'building'], ['add', '', 'plus'], ['money', 'الفلوس', 'wallet'], ['more', 'المزيد', 'grid']];
 
   function viewShell() {
     const sn = S.snap;
@@ -366,7 +368,7 @@
       <header class="top"><div class="top-row">
         <img src="${sn.office.logo ? esc(sn.office.logo) : 'icons/icon-192.png'}" alt="">
         <div class="t"><b>${esc(sn.office.name || 'مكتب زين المختار')}</b><span class="sync" id="sync"></span></div>
-        <button class="icon-btn press" id="adm" aria-label="الإدارة">${icon('cog', 19)}</button>
+        <button class="icon-btn press" id="eye" aria-label="إخفاء الأرقام">${icon(LS.get('zm-hide') ? 'eyeOff' : 'eye', 19)}</button>
         <button class="icon-btn press" id="nb" aria-label="الإشعارات">${icon('bell', 19)}</button>
         <button class="icon-btn press" id="rf" aria-label="تحديث">${icon('refresh', 19)}</button>
       </div></header>
@@ -378,7 +380,9 @@
       </div></nav>`;
     $app.querySelector('#rf').onclick = () => { refresh(); flushQueue(); };
     $app.querySelector('#nb').onclick = () => notifSheet();
-    $app.querySelector('#adm').onclick = () => adminSheet();
+    // إخفاء الأرقام (إذا أحد جنبك يشوف الشاشة)
+    $app.querySelector('#eye').onclick = () => { const h = !LS.get('zm-hide'); LS.set('zm-hide', h); document.body.classList.toggle('hid', h); $app.querySelector('#eye').innerHTML = icon(h ? 'eyeOff' : 'eye', 19); };
+    document.body.classList.toggle('hid', !!LS.get('zm-hide'));
     $app.querySelectorAll('.tabs button').forEach((b) => {
       b.onclick = () => {
         if (b.dataset.tab === 'add') return addMenu();
@@ -401,10 +405,16 @@
   function paintMain() {
     const main = $app.querySelector('#main');
     if (!main) return;
-    main.innerHTML = ({ home: tabHome, invoices: tabInvoices, clients: tabClients, finance: tabFinance })[S.tab]();
+    main.innerHTML = ({ today: tabToday, office: tabOffice, money: tabMoney, more: tabMore })[S.tab]();
+    mountEmbeds(main);
     main.querySelectorAll('[data-act]').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); act(el.dataset.act, el.dataset.v, el); }; });
     const q = main.querySelector('#q');
     if (q) q.oninput = () => { S.q = q.value; main.querySelector('#invlist').innerHTML = invoiceList(); bindRows(main); };
+    const gs = main.querySelector('#gs');
+    if (gs) gs.oninput = () => { S.gq = gs.value; main.querySelector('#gsr').innerHTML = searchResults(); bindRows(main); bindSearch(main); };
+    bindSearch(main);
+    main.querySelectorAll('[data-go]').forEach((el) => { el.onclick = () => goAction(el.dataset.go); });
+    main.querySelectorAll('[data-more]').forEach((el) => { el.onclick = () => moreAction(el.dataset.more); });
     const cq = main.querySelector('#cq');
     if (cq) cq.oninput = () => { S.cq = cq.value; main.querySelector('#clist').innerHTML = clientList(); bindRows(main); };
     bindRows(main);
@@ -463,61 +473,133 @@
   };
   const pendingRows = (types) => pendingOf(types).map((x) => `<div class="item pending noic"><div class="m"><b>${esc(x.label)}</b><span>${x.sent ? 'بانتظار برنامج المكتب' : 'لم تُرسل بعد'}</span></div><div class="e"><span class="chip gold">${icon('clock', 12)} بالانتظار</span></div></div>`).join('');
 
-  // ═════════════ الرئيسية ═════════════
-  function tabHome() {
-    const sn = S.snap;
-    const d = sn.months[S.month];
-    const months = Object.keys(sn.months).sort();
-    const isCurrent = S.month === months[months.length - 1];
-    const tRow = (d.daily || []).find((x) => x.day === todayStr()) || { cash: 0, qi_card: 0, balance: 0 };
-    const tTotal = tRow.cash + tRow.qi_card + (tRow.balance || 0);
+  // ═════════════ الهيكل الجديد (2.6.0): اليوم · المكتب · + · الفلوس · المزيد ═════════════
+  // embed: يبني محتوى «شيت» موجود داخل التبويب بدل ما يفتحه فوق (نفس الكود، بدون تكرار)
+  let embeds = [];
+  function embed(fn, ...args) {
+    let cap = null; const real = openSheet;
+    openSheet = (t, body, mount) => { cap = { body, mount }; };
+    try { fn(...args); } finally { openSheet = real; }
+    if (!cap) return '<div class="empty">لا توجد بيانات — حدّث برنامج المكتب</div>';
+    if (cap.mount) embeds.push(cap.mount);
+    return cap.body;
+  }
+  function mountEmbeds(main) { const list = embeds; embeds = []; bindMoney(main); list.forEach((m) => m(main, main)); }
+
+  const greetNow = () => { const h = new Date().getHours(); return h < 12 ? 'صباح الخير' : 'مساء الخير'; };
+  // تنتظرك: كل شي يحتاج قرارك اليوم — وكل سطر بيه زر يسوّي الشغل مباشرة
+  const nm = (v) => `<span class="num">${fmt(v)}</span>`;
+  function waiting() {
+    const o = OF(); const out = [];
+    const D = S.snap.sal?.dueToday;
+    if (D && !pendingOf(['sal:pay']).length) out.push({ c: 'var(--gold-2)', b: `رواتب اليوم — ${nm(D.total)}`, s: D.short ? `الصندوق ينقص ${nm(D.short)}` : D.due.map((x) => esc(x.name)).join('، '), go: 'صرف', a: 'sal' });
+    (o?.installments || []).filter((x) => x.status === 'overdue').slice(0, 3).forEach((x) => out.push({ c: 'var(--red)', b: `قسط متأخر — ${esc(x.party_name)}`, s: `${nm(x.left)} · من ${x.overdue_days} يوم`, go: 'ذكّره', a: 'contracts' }));
+    const open = openTx();
+    open.filter((t) => t.stage === 'ready').slice(0, 3).forEach((t) => out.push({ c: 'var(--green)', b: `${esc(t.title)} — جاهزة`, s: `${esc(t.party_name || t.client_name || '')} · بلّغ الزبون`, go: 'فتح', a: `tx:${t.id}` }));
+    open.filter((t) => t.late).slice(0, 3).forEach((t) => out.push({ c: 'var(--red)', b: `${esc(t.title)} — متأخرة`, s: `${esc(t.party_name || t.client_name || '')} · ${t.late_days} يوم`, go: 'فتح', a: `tx:${t.id}` }));
+    const pend = (o?.pending || []).length;
+    if (pend) out.push({ c: 'var(--amber)', b: `${pend} ${pend > 1 ? 'عقود' : 'عقد'} بانتظار التوقيع`, s: 'الزبون يوقّع بإصبعه هنا', go: 'توقيع', a: 'contracts' });
+    const exp = (o?.expiries || []).filter((e) => daysTo(e.expires_on) <= 7 && daysTo(e.expires_on) >= -30);
+    if (exp.length) out.push({ c: 'var(--amber)', b: `${exp.length} ${exp.length > 1 ? 'تجديدات' : 'تجديد'} خلال أسبوع أو منتهية`, s: exp.slice(0, 2).map((e) => esc(e.title)).join('، '), go: 'تذكير', a: 'expiries' });
+    const tasks = (S.snap.tasks || []).filter((t) => t.due_date <= todayStr());
+    if (tasks.length) out.push({ c: 'var(--blue)', b: `${tasks.length} ${tasks.length > 1 ? 'أعمال' : 'عمل'} اليوم والمتأخرة`, s: esc(tasks[0].title), go: 'عرض', a: 'tasks' });
+    const pAbs = (S.snap.sal?.staff || []).reduce((t, u) => t + (u.pending || []).length, 0);
+    if (pAbs && !D) out.push({ c: 'var(--muted)', b: `${pAbs} خصم ينتظر الراتب الجاي`, s: 'غياب / تأخير', go: 'عرض', a: 'abs' });
+    return out.slice(0, 6); // أهم 6 بس حتى تبقى الشاشة قصيرة
+  }
+  function goAction(a) {
+    if (a.startsWith('tx:')) return txnSheet(Number(a.slice(3)));
+    if (a.startsWith('add:')) return addAction(a.slice(4));
+    ({ sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
+  }
+  function tabToday() {
+    const sn = S.snap; const now = new Date();
+    const d = sn.months[Object.keys(sn.months).sort().pop()];
+    const tRow = (d?.daily || []).find((x) => x.day === todayStr()) || { cash: 0, qi_card: 0, balance: 0 };
     const tCount = sn.invoices.filter((x) => !x.is_void && x.created_at.slice(0, 10) === todayStr()).length;
-    const diff = d.prevIncome ? Math.round(((d.monthIncome.total - d.prevIncome) / d.prevIncome) * 100) : null;
-    const maxDay = Math.max(1, ...(d.daily || []).map((x) => x.cash + x.qi_card + (x.balance || 0)));
-    const tasks = (sn.tasks || []).filter((t) => t.due_date <= todayStr());
+    const newDebt = sn.invoices.filter((x) => !x.is_void && x.created_at.slice(0, 10) === todayStr()).reduce((a, x) => a + Math.max(0, x.total_amount - x.paid_amount), 0);
+    const box = sn.cashToday ? sn.cashToday.expected : null;
+    const W = waiting();
     const emps = (sn.employees || []).filter((e) => e.today.count || e.today.cash || e.today.qi);
-    const empMax = Math.max(1, ...emps.map((e) => e.today.total));
-    const now = new Date();
+    const last = auditList().slice(0, 3);
     return `
-      ${title('الرئيسية', `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}
+      ${title(`${greetNow()}، ${esc((S.user?.full_name || '').split(' ')[0] || '')}`, `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}
       ${statusBars()}
-      ${picker('month', monthName(S.month), months, S.month)}
-      <div class="card hero">
-        <div class="lbl">صافي الربح</div>
-        <div class="big ${d.netProfit < 0 ? 'red' : ''}"><span class="num">${fmt(d.netProfit)}</span><small>د.ع</small></div>
-        <div class="split"><div><span>الدخل</span><b class="num">${fmt(d.monthIncome.total)}</b></div><div><span>المصاريف</span><b class="num">${fmt(d.expensesTotal)}</b></div></div>
+      <div class="search">${icon('search', 18)}<input class="input" id="gs" type="search" placeholder="ابحث: عميل، فاتورة، معاملة، هاتف…" value="${esc(S.gq)}" autocomplete="off"></div>
+      <div id="gsr">${searchResults()}</div>
+      <div class="card hero today" data-go="cash">
+        <div class="lbl">دخل اليوم <span>${tCount} فاتورة</span></div>
+        <div class="big"><span class="num">${fmt(tRow.cash + tRow.qi_card + (tRow.balance || 0))}</span><small>د.ع</small></div>
+        <div class="g3"><div><span>بالصندوق</span><b class="num">${box === null ? '—' : fmt(box)}</b></div><div><span>كي كارد</span><b class="num">${fmt(tRow.qi_card)}</b></div><div><span>ديون جديدة</span><b class="num">${fmt(newDebt)}</b></div></div>
       </div>
-      <div class="kpis">
-        ${isCurrent ? kpi('دخل اليوم', money(tTotal), `${tCount} فاتورة · كاش ${fmt(tRow.cash)} · كي ${fmt(tRow.qi_card)}`, 'wide') : ''}
-        ${kpi('كاش', money(d.monthIncome.cash), '', '', 'var(--green)')}
-        ${kpi('كي كارد', money(d.monthIncome.qi_card), '', '', 'var(--blue)')}
-        ${kpi('الديون المفتوحة', `<span class="red">${money(d.debts.total)}</span>`, `${d.debts.count} فاتورة`)}
-        ${kpi('عدد الفواتير', `<span class="num">${fmt(d.salesCount)}</span>`, diff === null ? '' : `<span class="${diff >= 0 ? 'green' : 'red'}">${diff >= 0 ? '▲' : '▼'} <span class="num">${Math.abs(diff)}%</span></span> عن الشهر السابق`)}
-        ${kpi('الخصومات', money(d.discountTotal))}
-        ${kpi('مدخولك الخارجي', `<span class="gold">${money(d.externalTotal)}</span>`)}
+      <h2 class="sec">تنتظرك ${W.length ? `<span class="cnt">${W.length}</span>` : ''}</h2>
+      <div class="card flush inbox">${W.length ? W.map((w) => `<button class="it" data-go="${w.a}"><span class="bar" style="background:${w.c}"></span><div class="m"><b>${w.b}</b><span>${w.s}</span></div><span class="go">${w.go}</span></button>`).join('') : '<div class="empty">ماكو شي ينتظرك — كلشي ماشي ✓</div>'}</div>
+      <div class="qa">${[['inv', 'receipt', 'فاتورة'], ['exp', 'wallet', 'مصروف'], ['debt', 'cash', 'تسديد'], ['req', 'chat', 'متطلبات']].map(([k, i, t]) => `<button class="press" data-go="add:${k}">${icon(i, 22)}<span>${t}</span></button>`).join('')}</div>
+      <h2 class="sec">المكتب هسه <button class="more" data-go="activity">كل النشاط</button></h2>
+      <div class="card flush">
+        ${emps.length ? emps.map((e) => `<div class="item noic"><div class="m"><b>${esc(e.full_name)}</b><span>${e.today.count} فاتورة · كاش ${fmt(e.today.cash)} · كي ${fmt(e.today.qi)}</span></div><div class="e"><b class="num">${fmt(e.today.total)}</b></div></div>`).join('') : '<div class="item noic"><div class="m"><b>ما انقطعت فواتير اليوم بعد</b></div></div>'}
+        ${last.map(auditRow).join('')}
       </div>
-
-      ${officeTiles()}
-
-      <h2 class="sec">آخر التعديلات على النظام <button class="more" data-act="activity">عرض الكل</button></h2>
-      <div class="card flush">${auditList().length ? auditList().slice(0, 6).map(auditRow).join('') : '<div class="empty">لا يوجد نشاط بعد</div>'}</div>
-
-      <h2 class="sec">جدول الأعمال — اليوم والمتأخرة <button class="more" data-act="tasks">عرض الكل</button></h2>
-      <div class="card flush">${tasks.length ? tasks.slice(0, 6).map(taskRow).join('') : '<div class="empty">لا توجد أعمال مطلوبة اليوم</div>'}
-        ${pendingRows(['tasks:save', 'tasks:done', 'tasks:postpone'])}</div>
-
-      ${isCurrent ? `<h2 class="sec">مبيعات الموظفين اليوم</h2>
-      <div class="card flush">${emps.length ? emps.map((e) => `<div class="emp"><b>${esc(e.full_name)}</b><span class="t num">${fmt(e.today.total)}</span>
-        <div class="bar"><i style="width:${(e.today.total / empMax) * 100}%"></i></div>
-        <div class="s"><span>${e.today.count} فاتورة</span><span>كاش ${fmt(e.today.cash)}</span><span>كي ${fmt(e.today.qi)}</span>${e.today.due ? `<span class="red">آجل ${fmt(e.today.due)}</span>` : ''}</div></div>`).join('') : '<div class="empty">لا مبيعات اليوم بعد</div>'}</div>` : ''}
-
-      <h2 class="sec">الدخل اليومي</h2>
-      <div class="card">${(d.daily || []).length ? `<div class="chart">${d.daily.map((x) => `<div class="c ${x.day === todayStr() ? 'today' : ''}" data-day="${x.day}"><i style="height:${((x.cash + x.qi_card + (x.balance || 0)) / maxDay) * 100}%"></i><span>${Number(x.day.slice(8))}</span></div>`).join('')}</div>` : '<div class="empty">لا يوجد دخل في هذا الشهر</div>'}</div>
-      ${d.byService.length ? `<h2 class="sec">أكثر الخدمات مبيعاً</h2><div class="card">${bars(d.byService, 'name', 'total')}</div>` : ''}
-      ${d.discounts.length ? `<h2 class="sec">الخصومات</h2><div class="card flush">${d.discounts.slice(0, 15).map((x) => `<div class="item"><div class="av amber">٪</div><div class="m"><b>${esc(x.client_name)}</b><span>${esc(x.receipt_no)} · بواسطة ${esc(x.by_name)}</span></div><div class="e"><b class="amber num">-${fmt(x.discount_total)}</b></div></div>`).join('')}</div>` : ''}
-      <div class="foot-note">آخر مزامنة ${new Date(sn.at).toLocaleString('ar-IQ-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' })}</div>`;
+      <div class="foot-note">آخر مزامنة ${ago(sn.at)}</div>`;
   }
 
+  // بحث واحد: العملاء + الفواتير + المعاملات
+  function searchResults() {
+    const q = (S.gq || '').trim().toLowerCase();
+    if (q.length < 2) return '';
+    const has = (t) => String(t || '').toLowerCase().includes(q);
+    const cl = S.snap.clients.filter((c) => has(`${c.name} ${c.company || ''} ${c.phone || ''}`)).slice(0, 5);
+    const inv = S.snap.invoices.filter((x) => has(`${x.receipt_no} ${x.client_name} ${x.company_name || ''} ${x.client_phone || ''} ${x.service_name}`)).slice(0, 5);
+    const tx = (OF()?.txns || []).filter((t) => has(`${t.title} ${t.party_name || ''} ${t.client_name || ''} ${t.receipt_no || ''}`)).slice(0, 5);
+    if (!cl.length && !inv.length && !tx.length) return '<div class="card"><div class="empty">ما لكيت شي بهالاسم</div></div>';
+    return `${cl.length ? `<h2 class="sec">العملاء</h2><div class="card flush">${cl.map((c) => `<button class="item" data-open="client:${c.id}"><div class="av ${c.balance ? 'red' : 'gray'}">${initial(c.name)}</div><div class="m"><b>${esc(c.name)}</b><span>${esc(c.company || c.phone || '')}</span></div><div class="e">${c.balance ? `<b class="red num">${fmt(c.balance)}</b>` : ''}</div></button>`).join('')}</div>` : ''}
+      ${inv.length ? `<h2 class="sec">الفواتير</h2><div class="card flush">${inv.map((x) => `<button class="item noic" data-open="inv:${x.id}"><div class="m"><b class="num">${esc(x.receipt_no)}</b><span>${esc(x.company_name || x.client_name)} · ${esc(x.service_name)}</span></div><div class="e"><b class="num">${fmt(x.total_amount)}</b></div></button>`).join('')}</div>` : ''}
+      ${tx.length ? `<h2 class="sec">المعاملات</h2><div class="card flush">${tx.map(txnRow).join('')}</div>` : ''}`;
+  }
+  function bindSearch(root) { root.querySelectorAll('#gsr [data-tx]').forEach((b) => { b.onclick = () => txnSheet(Number(b.dataset.tx)); }); }
+
+  // ───── المكتب ─────
+  function tabOffice() {
+    const o = OF(); const open = openTx();
+    const segs = [['txns', 'المعاملات'], ['clients', 'العملاء'], ['couriers', 'العهدة'], ['contracts', 'العقود'], ['tasks', 'الجدول']];
+    setTimeout(() => bindSeg($app.querySelector('#main'), 'oseg', (v) => { S.oseg = v; paintMain(); }));
+    const body = ({
+      txns: () => (o ? embed(txnsSheet, S.txf) : '<div class="empty">حدّث برنامج المكتب</div>'),
+      clients: () => tabClients(true),
+      couriers: () => embed(couriersSheet),
+      contracts: () => `${embed(contractsSheet)}<button class="btn btn-ghost btn-block" data-go="expiries">${icon('clock', 17)} التجديدات وتواريخ الانتهاء</button>`,
+      tasks: () => embed(tasksSheet),
+    })[S.oseg]();
+    return `${title('المكتب', `${open.length} مفتوحة · ${open.filter((t) => t.late).length} متأخرة · ${open.filter((t) => t.stage === 'ready').length} جاهزة`, S.oseg === 'clients' ? `<button class="btn btn-ghost btn-sm press" data-act="newClient">${icon('userPlus', 16)} عميل</button>` : '')}
+      ${statusBars()}<div class="seg scroll" data-seg="oseg">${segs.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === S.oseg ? 'on' : ''}">${l}</button>`).join('')}</div>${body}`;
+  }
+
+  // ───── المزيد: كل الإدارة بمكان واحد ─────
+  function tabMore() {
+    const sn = S.snap; const me = sn.me; const L = sn.sal;
+    const r = (k, i, c, t, sub = '') => `<button class="item" data-more="${k}"><div class="av" style="background:${c}22;color:${c}">${icon(i, 18)}</div><div class="m"><b>${t}</b>${sub ? `<span>${sub}</span>` : ''}</div><div class="e">${icon('chevL', 16)}</div></button>`;
+    return `${title('المزيد', `${esc(S.user?.full_name || '')} · المدير`)}${statusBars()}
+      <h2 class="sec">إلك بس</h2><div class="card flush">
+        ${r('me', 'lock', '#e3c37b', 'ماليتي', me ? `يبقى إلك ${fmt(me.left)}${me.officeOwes ? ` · المكتب مدين إلك ${fmt(me.officeOwes)}` : ''}` : '')}
+        ${L ? r('dep', 'hand', '#e3c37b', 'حطيت فلوس من عندي', L.owed ? `المكتب مدين إلك ${fmt(L.owed)}` : 'إيداع بالصندوق') : ''}</div>
+      ${L ? `<h2 class="sec">الموظفين</h2><div class="card flush">
+        ${r('staff', 'users', '#6e98f5', 'الموظفون والصلاحيات', `${(sn.staff || []).filter((u) => u.role !== 'admin').length} موظف`)}
+        ${r('sal', 'cash', '#2fc28c', 'صرف الرواتب', L.dueToday ? `اليوم ${fmt(L.dueToday.total)}` : '')}
+        ${r('abs', 'clock', '#f5b452', 'الغياب والإجازات', L.staff.reduce((t, u) => t + (u.pending || []).length, 0) ? 'خصومات تنتظر الراتب' : '')}</div>` : ''}
+      <h2 class="sec">المكتب</h2><div class="card flush">
+        ${r('svc', 'receipt', '#f5b452', 'الخدمات والأسعار', `${(sn.servicesAll || []).length} خدمة`)}
+        ${r('guide', 'task', '#6e98f5', 'دليل المتطلبات', `${(sn.guide || []).length} موضوع`)}
+        ${r('req', 'chat', '#2fc28c', 'إرسال متطلبات لزبون')}
+        ${r('expiries', 'clock', '#f06a80', 'التجديدات')}
+        ${r('log', 'clock', '#7f879b', 'سجل النشاط')}</div>
+      <h2 class="sec">الآيفون</h2><div class="card flush">
+        ${r('notif', 'bell', '#7f879b', 'الإشعارات')}
+        ${r('logout', 'logout', '#f06a80', 'تسجيل الخروج')}</div>`;
+  }
+  function moreAction(k) {
+    if (k === 'logout') { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; render(); } return; }
+    ({ me: meSheet, dep: depositSheet, staff: staffSheet, sal: salPaySheet, abs: absSheet, svc: servicesSheet, guide: guideSheet, req: () => reqSheet(), expiries: expiriesSheet, log: activitySheet, notif: notifSheet })[k]?.();
+  }
   const hm12 = (t) => { const h = Number(t.slice(0, 2)); return `${((h + 11) % 12) + 1}:${t.slice(3, 5)} ${h < 12 ? 'ص' : 'م'}`; };
   const REACT = { star: '⭐ ممتاز', thanks: '👍 شكراً', note: '💬 ملاحظة' };
   function taskRow(t) {
@@ -552,11 +634,11 @@
         </button>`;
     }).join('');
   }
-  function tabInvoices() {
+  function tabInvoices(inline = false) {
     const days = [...new Set(S.snap.invoices.map((x) => x.created_at.slice(0, 10)))].slice(0, 30);
     const list = S.invDay ? S.snap.invoices.filter((x) => x.created_at.slice(0, 10) === S.invDay && !x.is_void) : null;
     return `
-      ${title('الفواتير', (S.snap.invoiceDays || 90) > 300 ? 'آخر سنة' : 'آخر 90 يوماً', `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>`)}
+      ${inline ? '' : title('الفواتير', (S.snap.invoiceDays || 90) > 300 ? 'آخر سنة' : 'آخر 90 يوماً', `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>`)}
       <div class="search">${icon('search', 18)}<input class="input" id="q" type="search" placeholder="الشركة، العميل، الخدمة، رقم الفاتورة" value="${esc(S.q)}"></div>
       <div class="chips">
         <button class="${S.invDay ? '' : 'on'}" data-act="day" data-v="">الكل</button>
@@ -852,21 +934,6 @@
   const openTx = () => (OF()?.txns || []).filter((t) => ['docs', 'office', 'courier', 'ready'].includes(t.stage));
 
   // بطاقات المكتب في الرئيسية
-  function officeTiles() {
-    const o = OF(); if (!o) return '';
-    const open = openTx(); const late = open.filter((t) => t.late).length;
-    const cOpen = o.couriers?.totals?.open || 0;
-    const od = (o.installments || []).filter((x) => x.status === 'overdue');
-    const pend = (o.pending || []).length;
-    const exp = (o.expiries || []).filter((e) => daysTo(e.expires_on) <= 30 && daysTo(e.expires_on) >= -60);
-    return `${salBanner()}<h2 class="sec">المكتب</h2>
-      <div class="actions">
-        <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${open.length} مفتوحة${late ? ` · <span class="red" style="display:inline">${late} متأخرة</span>` : ''}</span></button>
-        <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${cOpen ? `عندهم ${fmt(cOpen)}` : 'مسوّاة'}</span></button>
-        <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${pend ? `${pend} بانتظار التوقيع` : ''}${pend && od.length ? ' · ' : ''}${od.length ? `<span class="red" style="display:inline">${od.length} قسط متأخر</span>` : ''}${!pend && !od.length ? `${(o.contracts || []).length} عقد` : ''}</span></button>
-        <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>${exp.length ? `${exp.length} خلال 30 يوم أو منتهية` : 'لا شيء قريب'}</span></button>
-      </div>`;
-  }
   function bindOffice(root) {
     root.querySelectorAll('[data-ofc]').forEach((b) => { b.onclick = () => ({ txns: txnsSheet, couriers: couriersSheet, contracts: contractsSheet, expiries: expiriesSheet, sal: salPaySheet, dep: depositSheet, owes: owesSheet, abs: absSheet })[b.dataset.ofc](); });
   }
@@ -888,7 +955,7 @@
       <div class="chips wrap">${[['open', `مفتوحة ${sets.open.length}`], ['missing', `ناقصها أوراق ${sets.missing.length}`], ['late', `متأخرة ${sets.late.length}`], ['ready', `جاهزة ${sets.ready.length}`], ['done', 'المنتهية']].map(([k, l]) => `<button class="${k === filter ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
       ${pendingRows(['txn:stage', 'txn:update', 'txn:note']).length ? `<div class="card flush">${pendingRows(['txn:stage', 'txn:update', 'txn:note'])}</div>` : ''}
       <div class="card flush list">${list.map(txnRow).join('') || '<div class="empty">لا توجد معاملات</div>'}</div>`, (sb) => {
-      sb.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => txnsSheet(b.dataset.f); });
+      sb.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { if (S.tab === 'office' && !sheetEl) { S.txf = b.dataset.f; paintMain(); } else txnsSheet(b.dataset.f); }; });
       sb.querySelectorAll('[data-tx]').forEach((b) => { b.onclick = () => txnSheet(Number(b.dataset.tx)); });
     });
   }
@@ -1259,33 +1326,6 @@
   }
 
   // ═════════════ الإدارة من الآيفون: الموظفون والصلاحيات + الخدمات والأسعار ═════════════
-  function adminSheet() {
-    const sn = S.snap;
-    openSheet('الإدارة', `${!sn.staff ? '<div class="note">حدّث برنامج المكتب على الحاسبة الرئيسية حتى تظهر أدوات الإدارة</div>' : `<div class="actions">
-      <button class="action press" data-a="staff"><span class="ic">${icon('users', 21)}</span><b>الموظفون</b><span>${sn.staff.filter((u) => u.role !== 'admin').length} موظف · الصلاحيات والتفعيل</span></button>
-      <button class="action press" data-a="svc"><span class="ic">${icon('receipt', 21)}</span><b>الخدمات والأسعار</b><span>${(sn.servicesAll || []).length} خدمة</span></button>
-      <button class="action press" data-a="me"><span class="ic">${icon('lock', 21)}</span><b>ماليتي</b><span>${sn.me ? `يبقى إلك ${fmt(sn.me.left)}` : 'خاص بالمدير'}</span></button>
-      <button class="action press" data-a="guide"><span class="ic">${icon('task', 21)}</span><b>دليل المتطلبات</b><span>${(sn.guide || []).length} موضوع</span></button>
-      <button class="action press" data-a="cash"><span class="ic">${icon('wallet', 21)}</span><b>الصندوق اليوم</b><span>الجرد والحركات مباشرة</span></button>
-      <button class="action press" data-a="log"><span class="ic">${icon('clock', 21)}</span><b>سجل النشاط</b><span>كل العمليات</span></button>
-    </div>`}
-    ${sn.ofc ? `<h2 class="sec" style="margin:4px 4px 0">المكتب</h2><div class="actions">
-      <button class="action press" data-ofc="txns"><span class="ic">${icon('task', 21)}</span><b>المعاملات</b><span>${openTx().length} مفتوحة</span></button>
-      <button class="action press" data-ofc="couriers"><span class="ic">${icon('hand', 21)}</span><b>عهدة المحامين والأشخاص</b><span>${fmt(sn.ofc.couriers?.totals?.open || 0)}</span></button>
-      <button class="action press" data-ofc="contracts"><span class="ic">${icon('edit', 21)}</span><b>العقود والأقساط</b><span>${(sn.ofc.pending || []).length} بانتظار التوقيع</span></button>
-      <button class="action press" data-ofc="expiries"><span class="ic">${icon('clock', 21)}</span><b>التجديدات</b><span>تواريخ الانتهاء</span></button>
-      ${sn.sal ? `<button class="action press" data-ofc="sal"><span class="ic">${icon('users', 21)}</span><b>صرف الرواتب</b><span>${sn.sal.dueToday ? `اليوم ${fmt(sn.sal.dueToday.total)}` : 'الموظفين'}</span></button>
-      <button class="action press" data-ofc="abs"><span class="ic">${icon('task', 21)}</span><b>غياب / إجازة</b><span>${sn.sal.staff.reduce((t, u) => t + (u.pending || []).length, 0) ? `خصومات تنتظر الراتب` : 'تسجيل للموظفين'}</span></button>
-      <button class="action press" data-ofc="dep"><span class="ic">${icon('plus', 21)}</span><b>حطيت فلوس من عندي</b><span>${sn.sal.owed ? `المكتب مدين إلك ${fmt(sn.sal.owed)}` : 'إيداع بالصندوق'}</span></button>` : ''}
-    </div>` : ''}
-    <button class="btn btn-ghost btn-block" id="lo">${icon('logout', 17)} تسجيل الخروج</button>`, (sb) => {
-      sb.querySelector('#lo').onclick = () => { if (confirm('تسجيل الخروج؟')) { LS.del('zm-session'); S.user = null; closeSheet(true); render(); } };
-      bindOffice(sb);
-      sb.querySelectorAll('[data-a]').forEach((b) => {
-        b.onclick = () => ({ me: meSheet, guide: guideSheet, staff: staffSheet, svc: servicesSheet, cash: () => { closeSheet(true); S.tab = 'finance'; S.fin = 'cash'; render(); }, log: activitySheet })[b.dataset.a]();
-      });
-    });
-  }
   function staffSheet() {
     const list = S.snap.staff.filter((u) => u.role !== 'admin');
     openSheet('الموظفون', `<div class="card flush list">${list.map((u) => `<button class="item" data-u="${u.id}"><div class="av ${u.is_active ? '' : 'gray'}">${initial(u.full_name)}</div>
@@ -1533,14 +1573,13 @@
       <div class="e">${c.balance ? `<b class="red num">${fmt(c.balance)}</b>` : ''}${c.owed_to ? `<span class="chip amber">له ${fmt(c.owed_to)}</span>` : ''}${!c.balance && !c.owed_to ? '<span class="chip green">لا ديون</span>' : ''}</div>
     </button>`).join('');
   }
-  function tabClients() {
+  function tabClients(inline = false) {
     const sn = S.snap;
     const total = sn.debts.reduce((a, x) => a + (x.total_amount - x.paid_amount), 0);
     const owed = sn.payables.reduce((a, x) => a + x.amount, 0);
     setTimeout(() => bindSeg($app.querySelector('#main'), 'cview', (v) => { S.cview = v; paintMain(); }));
     return `
-      ${title('العملاء', `${sn.clients.length} عميل مسجل`, `<button class="btn btn-ghost btn-sm press" data-act="newClient">${icon('userPlus', 16)} عميل</button>`)}
-      ${statusBars()}
+      ${inline ? '' : `${title('العملاء', `${sn.clients.length} عميل مسجل`, `<button class="btn btn-ghost btn-sm press" data-act="newClient">${icon('userPlus', 16)} عميل</button>`)}${statusBars()}`}
       <div class="kpis">
         ${kpi('ديون لنا على العملاء', `<span class="red">${money(total)}</span>`, `${sn.debts.length} فاتورة`)}
         ${kpi('مبالغ يطلبونها منا', `<span class="amber">${money(owed)}</span>`, `${sn.payables.length} مبلغ`)}
@@ -1625,12 +1664,14 @@
     });
   }
 
-  // ═════════════ المالية ═════════════
-  function tabFinance() {
-    const tabsHtml = seg('fin', [['days', 'اليومي'], ['expenses', 'المصاريف'], ['external', 'الخارجي'], ['year', 'السنوي'], ['cash', 'الصندوق']], S.fin);
-    const body = ({ days: finDays, expenses: finExpenses, external: finExternal, year: finYear, cash: finCash })[S.fin]();
+  // ═════════════ الفلوس ═════════════
+  function tabMoney() {
+    const F = [['cash', 'اليوم'], ['invoices', 'الفواتير'], ['debts', 'الديون'], ['days', 'اليومي'], ['expenses', 'المصاريف'], ['year', 'السنوي'], ['external', 'الخارجي']];
+    if (!F.some(([k]) => k === S.fin)) S.fin = 'cash';
+    const body = ({ cash: finCash, invoices: () => tabInvoices(true), debts: debtsView, days: finDays, expenses: finExpenses, external: finExternal, year: finYear })[S.fin]();
     setTimeout(() => bindSeg($app.querySelector('#main'), 'fin', (v) => { S.fin = v; paintMain(); }));
-    return `${title('المالية', 'خاص بالمدير')}${statusBars()}${tabsHtml}${body}`;
+    return `${title('الفلوس', 'خاص بالمدير', S.fin === 'invoices' ? `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>` : '')}${statusBars()}
+      <div class="seg scroll" data-seg="fin">${F.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === S.fin ? 'on' : ''}">${l}</button>`).join('')}</div>${body}`;
   }
   // ═════════════ الدخل اليومي: كل يوم بالتفصيل (كاش / كي كارد) لأي شهر ═════════════
   function dayIncome(day) {
@@ -2029,28 +2070,30 @@
     });
   }
 
-  // ═════════════ زر الإضافة (+) ═════════════
+  // ═════════════ زر (+): كل عمليات المكتب من مكان واحد ═════════════
+  const ADD = [
+    ['inv', 'receipt', 'فاتورة'], ['debt', 'cash', 'تسديد دين'], ['exp', 'wallet', 'مصروف'],
+    ['req', 'chat', 'إرسال متطلبات'], ['task', 'task', 'عمل لموظف'], ['swap', 'card', 'كي كارد بكاش'],
+    ['sal', 'users', 'صرف رواتب'], ['abs', 'clock', 'غياب / إجازة'], ['dep', 'hand', 'إيداع من جيبي'],
+    ['courier', 'building', 'عهدة لمحامي'], ['client', 'userPlus', 'عميل جديد'], ['ext', 'up', 'مدخول خارجي'],
+  ];
+  function addAction(k) {
+    LS.set('zm-recent', [k, ...(LS.get('zm-recent') || []).filter((x) => x !== k)].slice(0, 3));
+    ({
+      inv: () => invoiceForm(), exp: () => expenseSheet(), req: () => reqSheet(), task: () => taskSheet(), swap: () => swapSheet(), client: () => clientForm(), ext: () => externalSheet(),
+      sal: salPaySheet, abs: absSheet, dep: depositSheet, courier: couriersSheet,
+      debt: () => { S.tab = 'office'; S.oseg = 'clients'; closeSheet(true); render(); toast('اختر العميل ثم «دفعة»'); },
+    })[k]?.();
+  }
   function addMenu() {
-    const A = [
-      ['inv', 'receipt', 'فاتورة جديدة', 'كاش، كي كارد أو على الحساب'],
-      ['exp', 'wallet', 'مصروف', 'إيجار، رواتب، فواتير…'],
-      ['ext', 'up', 'مدخول خارجي', 'دخلك الشخصي'],
-      ['task', 'task', 'عمل / موعد', 'لليوم أو يوم آخر'],
-      ['debt', 'cash', 'تسديد دين', 'دفعة من عميل'],
-      ['swap', 'card', 'كي كارد مقابل كاش', 'دفعت بالكارد واستلمت كاش'],
-      ['client', 'userPlus', 'عميل جديد', 'للبيع على الحساب'],
-      ['req', 'chat', 'إرسال متطلبات', 'من دليل المتطلبات للزبون'],
-    ];
-    openSheet('إضافة', `<div class="actions">${A.map(([k, i, t, s]) => `<button class="action press" data-add="${k}"><span class="ic">${icon(i, 21)}</span><b>${t}</b><span>${s}</span></button>`).join('')}</div>`, (sb) => {
-      sb.querySelectorAll('[data-add]').forEach((b) => {
-        b.onclick = () => ({
-          req: () => reqSheet(), inv: () => invoiceForm(), exp: () => expenseSheet(), swap: () => swapSheet(), ext: () => externalSheet(), task: () => taskSheet(), client: () => clientForm(),
-          debt: () => { S.tab = 'clients'; closeSheet(true); render(); toast('اختر العميل ثم «دفعة»'); },
-        })[b.dataset.add]();
-      });
+    const sal = !!S.snap.sal;
+    const list = ADD.filter(([k]) => sal || !['sal', 'abs', 'dep'].includes(k));
+    const recent = (LS.get('zm-recent') || []).map((k) => ADD.find((a) => a[0] === k)).filter(Boolean);
+    openSheet('شنو تريد تسوي؟', `<div class="grid3">${list.map(([k, i, t], n) => `<button class="press ${n === 0 ? 'pri' : ''}" data-add="${k}">${icon(i, 24)}<span>${t}</span></button>`).join('')}</div>
+      ${recent.length ? `<div class="recent"><span>آخر شي سويته:</span>${recent.map(([k, , t]) => `<button data-add="${k}">${t}</button>`).join('')}</div>` : ''}`, (sb) => {
+      sb.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => addAction(b.dataset.add); });
     });
   }
-
   // ═════════════ التشغيل ═════════════
   window.__zm = { newInvoice: () => invoiceForm() };
   function render() {
@@ -2060,7 +2103,7 @@
     $app.querySelectorAll('.tabs button[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === S.tab));
     paintTop();
     const a = document.activeElement;
-    if (!a || !['q', 'cq'].includes(a.id)) paintMain();
+    if (!a || !['q', 'cq', 'gs'].includes(a.id)) paintMain();
   }
 
   async function boot() {
