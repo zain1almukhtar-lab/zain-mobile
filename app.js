@@ -121,7 +121,32 @@
   }
 
   const repo = () => `https://api.github.com/repos/${encodeURIComponent(cfg.o)}/${encodeURIComponent(cfg.r)}`;
+  // السيرفر السريع (اختياري): عنوانه يصل داخل اللقطة من برنامج المكتب. بدونه أو عند تعطله نرجع لـGitHub.
+  const srvUrl = () => LS.get('zm-srv') || '';
+  let authMemo = null;
+  async function srvAuth() {
+    if (authMemo?.k !== cfg.k) {
+      const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`zo-auth:${cfg.k}`));
+      authMemo = { k: cfg.k, v: [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('') };
+    }
+    return authMemo.v;
+  }
+  async function srvFetch(path, init = {}) {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+    try { return await fetch(srvUrl() + path, { ...init, headers: { ...(init.headers || {}), 'X-Auth': await srvAuth() }, cache: 'no-store', signal: ctl.signal }); } finally { clearTimeout(t); }
+  }
+  const valid = (text) => { try { const e = JSON.parse(text); return e.iv && e.ct ? e : null; } catch { return null; } };
   async function fetchEnvelope() {
+    const gh = fetchGithub();
+    if (!srvUrl()) return gh;
+    // نجلب من الاثنين ونأخذ الأحدث: إذا أُلغي السيرفر من المكتب تبقى نسخته قديمة فنرجع لـGitHub تلقائياً
+    const fromSrv = srvFetch('/snap').then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); const t = await r.text(); if (!valid(t)) throw new Error('BAD'); return t; });
+    const [a, b] = await Promise.allSettled([fromSrv, gh]);
+    const ok = [a, b].filter((x) => x.status === 'fulfilled').map((x) => x.value);
+    if (!ok.length) throw b.reason || a.reason;
+    return ok.sort((x, y) => String(valid(y).at || '').localeCompare(String(valid(x).at || '')))[0];
+  }
+  async function fetchGithub() {
     const tries = [
       () => fetch(`${repo()}/contents/snapshot.json?ref=data&t=${Date.now()}`, { headers: { Accept: 'application/vnd.github.raw' }, cache: 'no-store' }),
       () => fetch(`https://raw.githubusercontent.com/${encodeURIComponent(cfg.o)}/${encodeURIComponent(cfg.r)}/data/snapshot.json?t=${Date.now()}`, { cache: 'no-store' }),
@@ -154,7 +179,7 @@
     const op = { id: uid(), type, payload, user: S.user.username, at: new Date().toISOString() };
     saveQueue([...queue(), { ...op, label, sent: false }]);
     closeSheet();
-    toast('تم الحفظ — يُطبَّق في المكتب خلال دقيقة');
+    toast(srvUrl() ? 'تم الحفظ — يُطبَّق في المكتب خلال ثوانٍ' : 'تم الحفظ — يُطبَّق في المكتب خلال دقيقة');
     render();
     flushQueue();
     return true;
@@ -165,10 +190,16 @@
     const token = S.snap?.gh?.token;
     if (!token || flushing || !navigator.onLine) return;
     flushing = true;
+    let fast = false;
     try {
       for (const item of queue().filter((x) => !x.sent)) {
         const { label, sent, ...op } = item; // eslint-disable-line no-unused-vars
-        const body = JSON.stringify({ message: 'op', content: btoa(await encrypt(op)), branch: 'inbox' });
+        const enc = await encrypt(op);
+        if (srvUrl()) {
+          const r = await srvFetch('/ops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: op.id, body: enc }) }).catch(() => null);
+          if (r && r.ok) { saveQueue(queue().map((x) => (x.id === op.id ? { ...x, sent: true } : x))); fast = true; continue; }
+        } // السيرفر لم يستلم ← نرسلها عبر GitHub كالسابق
+        const body = JSON.stringify({ message: 'op', content: btoa(enc), branch: 'inbox' });
         const res = await fetch(`${repo()}/contents/ops/${op.id}.json`, {
           method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, body,
         }).catch(() => null);
@@ -178,6 +209,8 @@
       }
     } finally { flushing = false; }
     paintTop();
+    // عبر السيرفر النتيجة ترجع خلال ثوانٍ: نحدّث مرتين بدل انتظار 45 ثانية
+    if (fast) [7000, 16000].forEach((ms) => setTimeout(() => { if (document.visibilityState === 'visible' && !sheetEl) refresh({ silent: true }); }, ms));
   }
 
   // بعد كل تحديث: نزيل العمليات التي طُبقت، ونحفظ التي فشلت لعرض السبب
@@ -203,6 +236,7 @@
       const text = await fetchEnvelope();
       S.snap = await decrypt(text);
       LS.set('zm-snap', text);
+      if (S.snap.srv?.url) LS.set('zm-srv', S.snap.srv.url); else LS.del('zm-srv');
       S.offline = false; S.error = null;
     } catch (e) {
       if (!S.snap) { const c = LS.get('zm-snap'); if (c) { try { S.snap = await decrypt(c); } catch { /* ignore */ } } }
