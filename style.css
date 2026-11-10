@@ -388,3 +388,95 @@ body { background: radial-gradient(120% 40% at 100% 0%, rgba(36,56,106,.55), tra
 /* إخفاء الأرقام */
 .hid .num, .hid .big, .hid .kpi .v, .hid .hero .g3 b { filter: blur(7px); transition: filter .2s; }
 .inbox .it .m span.num { display: inline; font-size: inherit; color: inherit; }
+
+/* ═════ تصميم «أ» — الوصل (zm-v27): فاتح وهادئ، والشريط العلوي غامق مثل قائمة الحاسبة ═════
+   للرجوع للشكل القديم احذف من هذا السطر إلى آخر الملف. */
+:root {
+  color-scheme: light;
+  --bg: #f3f4f6; --bg-2: #ffffff; --card: #ffffff; --card-2: #f7f8fa; --card-3: #eef0f3;
+  --line: #e1e5ea; --line-2: #d6dae1;
+  --ink: #131c2b; --ink-2: #4b5567; --muted: #687385;
+  --gold: #131c2b; --gold-2: #131c2b; --gold-3: #0b1220; --gold-soft: #eef0f3; --gold-line: #c5cbd4;
+  --green: #1b7550; --green-soft: #e4f0ea; --red: #b23b2a; --red-soft: #f7e8e4; --amber: #94660f; --amber-soft: #f5ecda; --blue: #2f5d9e;
+  --r: 12px;
+  --paper: #ffffff; --btn: #131c2b; --btn-ink: #ffffff; --seg: #dfe3e9; --bar: #c5cbd4; --ph: #98a1ae;
+}
+/* الوضع الليلي: يتبع إعداد الآيفون نفسه (الإعدادات ← الشاشة والإضاءة) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0f1319; --bg-2: #171c24; --card: #171c24; --card-2: #1c222c; --card-3: #232a35;
+    --line: #2a323e; --line-2: #323a47;
+    --ink: #eceff3; --ink-2: #c1c7d1; --muted: #8a93a2;
+    --gold: #eceff3; --gold-2: #eceff3; --gold-3: #ffffff; --gold-soft: #232a35; --gold-line: #3a4352;
+    --green: #56c39a; --green-soft: rgba(86, 195, 154, .13); --red: #e98672; --red-soft: rgba(233, 134, 114, .13); --amber: #d9aa55; --amber-soft: rgba(217, 170, 85, .13); --blue: #7ea6e0;
+    --paper: #171c24; --btn: #eceff3; --btn-ink: #131c2b; --seg: #232a35; --bar: #3a4352; --ph: #6f7888;
+  }
+}
+body::before { content: ''; position: fixed; top: 0; inset-inline: 0; height: var(--safe-t); background: #111a29; z-index: 9; }
+body { background: var(--bg); }
+a { color: var(--ink); text-decoration: underline; }
+.num { letter-spacing: -.01em; }
+/* الشريط العلوي غامق: ساعة وبطارية الآيفون تبقى بيضاء ومقروءة فوقه */
+.top { background: #111a29; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 0; }
+.top .t b { color: #fff; } .top .sync { color: #aab3c2; } .top .sync i, .top .sync.off i { box-shadow: none; }
+.top .icon-btn { background: rgba(255, 255, 255, .08); border-color: #2a3650; color: #dfe4ec; }
+.top img { border-radius: 8px; }
+.auth { background: none; }
+.auth h1 { color: var(--ink); font-weight: 700; }
+.auth .brand img { box-shadow: 0 0 0 1px var(--line); border-radius: 22px; }
+/* أساسيات */
+.title h1 { font-weight: 700; font-size: 28px; }
+h2.sec { font-weight: 400; } h2.sec .more { color: var(--ink-2); font-weight: 600; }
+.card { border: 1px solid var(--line); border-radius: var(--r); }
+.input { border-radius: 10px; background: var(--paper); border-color: var(--line-2); }
+.input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px var(--card-3); }
+.input::placeholder { color: var(--ph); }
+.money-in .input { font-weight: 600; } .money-in span { font-weight: 400; }
+.field > label { font-weight: 600; }
+.btn { border-radius: 12px; font-weight: 700; }
+.btn-gold, .grid3 .pri { background: var(--btn); color: var(--btn-ink); box-shadow: none; }
+.grid3 .pri svg { color: var(--btn-ink); }
+.btn-ghost { background: var(--paper); }
+.btn-sm { border-radius: 9px; }
+.alert, .fail-bar, .toast.err { color: var(--red); }
+.alert, .note, .fail-bar { border-radius: 10px; }
+.note { color: var(--ink-2); }
+.note.amber { background: var(--amber-soft); color: var(--amber); } .note.red { background: var(--red-soft); color: var(--red); } .note.green { background: var(--green-soft); color: var(--green); }
+.blue { color: var(--blue); }
+.seg { background: var(--seg); border: 0; border-radius: 10px; padding: 3px; }
+.seg button { border-radius: 8px; font-weight: 400; height: 40px; }
+.seg button.on { background: var(--paper); color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(19, 28, 43, .15); }
+.chips button { border-radius: 8px; font-weight: 400; }
+.chips button.on { background: var(--btn); border-color: var(--btn); color: var(--btn-ink); font-weight: 700; }
+.chip { border-radius: 6px; font-weight: 400; }
+.icon-btn { border-radius: 10px; }
+/* البطاقة الرئيسية: بيضاء بأرقام غامقة بدل الغامق والذهبي */
+.hero, .card.hero { background: var(--card); border: 1px solid var(--line); }
+.hero::after, .card.hero::after { display: none; }
+.hero .split div, .hero .g3 div, .me-sp div { background: var(--card-2); border: 1px solid var(--line); }
+.item.pending { background: var(--card-2); }
+.bar-row .b i, .emp .bar i, .chart .c i { background: var(--bar); }
+.chart .c.today i { background: var(--btn); box-shadow: none; }
+.days .dbar i.c { background: var(--green); } .days .dbar i.q { background: var(--blue); }
+.sal-al { background: var(--card) !important; border: 1px solid var(--line) !important; border-inline-start: 3px solid #a9792b !important; }
+.sec .cnt { background: var(--btn); color: var(--btn-ink); border-radius: 6px; }
+.stg button.cur i { background: var(--btn); color: var(--btn-ink); }
+.line .qty { border-color: var(--line-2); border-radius: 9px; } .line .qty button { color: var(--ink-2); font-weight: 600; }
+.aging .ag { border-radius: 10px; }
+/* الشريط السفلي والأوراق */
+.tabs { background: var(--paper); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: 1px solid var(--line); }
+.tabs .fab { background: var(--btn); color: var(--btn-ink); box-shadow: 0 0 0 5px var(--paper); }
+.sheet-bg { background: rgba(17, 26, 41, .45); }
+.sheet { border-radius: 16px 16px 0 0; border-top: 0; }
+.sheet .foot { background: linear-gradient(transparent, var(--bg-2) 30%); }
+.toast { background: #131c2b; color: #fff; border: 1px solid #2a3650; backdrop-filter: none; -webkit-backdrop-filter: none; border-radius: 10px; }
+.toast.err { background: var(--red); color: #fff; }
+.splash img { border-radius: 20px; }
+
+/* ترتيب «أ»: أربع خانات بدون زر عائم */
+.tabs .in { grid-template-columns: repeat(4, 1fr); }
+.tabs button { font-weight: 400; font-size: 11.5px; }
+.tabs button.on { color: var(--ink); font-weight: 700; }
+.sale-inl { display: flex; flex-direction: column; gap: 12px; }
+.top .icon-btn { width: 36px; height: 36px; }

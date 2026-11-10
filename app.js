@@ -165,7 +165,7 @@
   // ═════════════ الحالة ═════════════
   const S = {
     snap: null, offline: false, loading: false, error: null, user: null,
-    tab: 'today', fin: 'cash', oseg: 'txns', txf: 'open', gq: '', month: null, expMonth: null, year: null,
+    tab: 'sale', fin: 'home', oseg: 'txns', txf: 'open', gq: '', month: null, expMonth: null, year: null,
     invDay: null, q: '', cq: '',
   };
 
@@ -390,7 +390,8 @@
   }
 
   // ═════════════ الهيكل ═════════════
-  const TABS = [['today', 'اليوم', 'home'], ['office', 'المكتب', 'building'], ['add', '', 'plus'], ['money', 'الفلوس', 'wallet'], ['more', 'المزيد', 'grid']];
+  // ترتيب «أ»: البيع، المكتب، المال، المزيد. قائمة «شنو تريد تسوي» صارت زر + بالشريط العلوي، وملخص اليوم أول قسم بالمال.
+  const TABS = [['sale', 'البيع', 'receipt'], ['office', 'المكتب', 'building'], ['money', 'المال', 'wallet'], ['more', 'المزيد', 'grid']];
 
   function viewShell() {
     const sn = S.snap;
@@ -402,6 +403,7 @@
       <header class="top"><div class="top-row">
         <img src="${sn.office.logo ? esc(sn.office.logo) : 'icons/icon-192.png'}" alt="">
         <div class="t"><b>${esc(sn.office.name || 'مكتب زين المختار')}</b><span class="sync" id="sync"></span></div>
+        <button class="icon-btn press" id="ad" aria-label="إضافة">${icon('plus', 20)}</button>
         <button class="icon-btn press" id="eye" aria-label="إخفاء الأرقام">${icon(LS.get('zm-hide') ? 'eyeOff' : 'eye', 19)}</button>
         <button class="icon-btn press" id="nb" aria-label="الإشعارات">${icon('bell', 19)}</button>
         <button class="icon-btn press" id="rf" aria-label="تحديث">${icon('refresh', 19)}</button>
@@ -414,6 +416,7 @@
       </div></nav>`;
     $app.querySelector('#rf').onclick = () => { refresh(); flushQueue(); };
     $app.querySelector('#nb').onclick = () => notifSheet();
+    $app.querySelector('#ad').onclick = () => addMenu();
     // إخفاء الأرقام (إذا أحد جنبك يشوف الشاشة)
     $app.querySelector('#eye').onclick = () => { const h = !LS.get('zm-hide'); LS.set('zm-hide', h); document.body.classList.toggle('hid', h); $app.querySelector('#eye').innerHTML = icon(h ? 'eyeOff' : 'eye', 19); };
     document.body.classList.toggle('hid', !!LS.get('zm-hide'));
@@ -439,7 +442,8 @@
   function paintMain() {
     const main = $app.querySelector('#main');
     if (!main) return;
-    main.innerHTML = ({ today: tabToday, office: tabOffice, money: tabMoney, more: tabMore })[S.tab]();
+    main.innerHTML = ({ sale: tabSale, office: tabOffice, money: tabMoney, more: tabMore })[S.tab]();
+    if (S.tab === 'sale') invoiceForm(null, main.querySelector('#saleHost'));
     mountEmbeds(main);
     main.querySelectorAll('[data-act]').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); act(el.dataset.act, el.dataset.v, el); }; });
     const q = main.querySelector('#q');
@@ -548,7 +552,12 @@
     if (a.startsWith('add:')) return addAction(a.slice(4));
     ({ jrd: cashCloseSheet, sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
   }
-  function tabToday() {
+  // البيع: نفس نموذج الفاتورة، لكن صفحة ثابتة بدل ورقة منزلقة
+  function tabSale() {
+    const now = new Date();
+    return `${title('بيع جديد', `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}${statusBars()}<div id="saleHost" class="sale-inl"></div>`;
+  }
+  function tabToday(embed = false) {
     const sn = S.snap; const now = new Date();
     const d = sn.months[Object.keys(sn.months).sort().pop()];
     const tRow = (d?.daily || []).find((x) => x.day === todayStr()) || { cash: 0, qi_card: 0, balance: 0 };
@@ -559,8 +568,7 @@
     const emps = (sn.employees || []).filter((e) => e.today.count || e.today.cash || e.today.qi);
     const last = auditList().slice(0, 3);
     return `
-      ${title(`${greetNow()}، ${esc((S.user?.full_name || '').split(' ')[0] || '')}`, `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}
-      ${statusBars()}
+      ${embed ? '' : `${title(`${greetNow()}، ${esc((S.user?.full_name || '').split(' ')[0] || '')}`, `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}${statusBars()}`}
       <div class="search">${icon('search', 18)}<input class="input" id="gs" type="search" placeholder="ابحث: عميل، فاتورة، معاملة، هاتف…" value="${esc(S.gq)}" autocomplete="off"></div>
       <div id="gsr">${searchResults()}</div>
       <div class="card hero today" data-go="cash">
@@ -1433,12 +1441,14 @@
   }
 
   // ═════════════ فاتورة جديدة ═════════════
-  function invoiceForm(preClientId = null) {
+  function invoiceForm(preClientId = null, inline = null) {
     const sn = S.snap;
     const st = { lines: [], client: preClientId ? sn.clients.find((c) => c.id === Number(preClientId)) : null, kind: preClientId ? 'client' : 'walk', pay: 'cash' };
     if (st.client) st.pay = 'account';
     let n = 0;
-    const sh = openSheet('فاتورة جديدة', `
+    // inline: يُرسم النموذج داخل صفحة «البيع» بدل ورقة
+    const host = inline ? (_t, body, mount) => { inline.innerHTML = body; bindMoney(inline); mount?.(inline, inline); return inline; } : openSheet;
+    const sh = host('فاتورة جديدة', `
       <div class="svc-grid" id="svcs">${sn.services.map((s) => `<button class="svc press" data-svc="${s.id}"><b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></button>`).join('')}
         <button class="svc press" data-svc="custom"><b>${icon('plus', 16)} خدمة أخرى</b><span class="muted">اسم ومبلغ</span></button></div>
       <div id="lines" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -1702,11 +1712,11 @@
 
   // ═════════════ الفلوس ═════════════
   function tabMoney() {
-    const F = [['cash', 'اليوم'], ['invoices', 'الفواتير'], ['debts', 'الديون'], ['days', 'اليومي'], ['expenses', 'المصاريف'], ['year', 'السنوي'], ['external', 'الخارجي']];
-    if (!F.some(([k]) => k === S.fin)) S.fin = 'cash';
-    const body = ({ cash: finCash, invoices: () => tabInvoices(true), debts: debtsView, days: finDays, expenses: finExpenses, external: finExternal, year: finYear })[S.fin]();
+    const F = [['home', 'اليوم'], ['cash', 'الصندوق'], ['invoices', 'الفواتير'], ['debts', 'الديون'], ['days', 'اليومي'], ['expenses', 'المصاريف'], ['year', 'السنوي'], ['external', 'الخارجي']];
+    if (!F.some(([k]) => k === S.fin)) S.fin = 'home';
+    const body = ({ home: () => tabToday(true), cash: finCash, invoices: () => tabInvoices(true), debts: debtsView, days: finDays, expenses: finExpenses, external: finExternal, year: finYear })[S.fin]();
     setTimeout(() => bindSeg($app.querySelector('#main'), 'fin', (v) => { S.fin = v; paintMain(); }));
-    return `${title('الفلوس', 'خاص بالمدير', S.fin === 'invoices' ? `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>` : '')}${statusBars()}
+    return `${title('المال', 'خاص بالمدير', S.fin === 'invoices' ? `<button class="btn btn-gold btn-sm press" onclick="window.__zm.newInvoice()">${icon('plus', 16)} فاتورة</button>` : '')}${statusBars()}
       <div class="seg scroll" data-seg="fin">${F.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === S.fin ? 'on' : ''}">${l}</button>`).join('')}</div>${body}`;
   }
   // ═════════════ الدخل اليومي: كل يوم بالتفصيل (كاش / كي كارد) لأي شهر ═════════════
