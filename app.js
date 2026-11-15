@@ -709,7 +709,8 @@
       <div class="card">
         ${(x.items || []).map((i) => `<div class="kv"><span style="color:var(--ink)">${esc(i.name)}${(i.qty || 1) > 1 ? ` <span class="chip gray num">× ${i.qty}</span>` : ''}</span><span>${i.original_price && i.price < i.original_price ? `<s class="muted num">${fmt(i.original_price)}</s> ` : ''}<b class="num">${fmt(i.price)}</b></span></div>`).join('')}
         ${x.discount_total ? `<div class="kv"><span>الخصم</span><b class="amber num">-${fmt(x.discount_total)}</b></div>` : ''}
-        <div class="kv"><span>المجموع</span><b class="gold num">${fmt(x.total_amount)}</b></div>
+        <div class="kv"><span>${x.fee_total ? 'أتعاب المكتب' : 'المجموع'}</span><b class="gold num">${fmt(x.total_amount)}</b></div>
+        ${x.fee_total ? `<div class="kv"><span>رسوم حكومية مدفوعة عنه</span><b class="num">${fmt(x.fee_total)}</b></div><div class="kv"><span>إجمالي فاتورة الزبون</span><b class="num">${fmt(x.total_amount + x.fee_total)}</b></div>` : ''}
         <div class="kv"><span>المدفوع</span><b class="num">${fmt(x.paid_amount)}</b></div>
         ${rem > 0 && !x.is_void ? `<div class="kv"><span>المتبقي</span><b class="red num">${fmt(rem)}</b></div>` : ''}
         ${x.notes ? `<div class="kv"><span>ملاحظات</span><span>${esc(x.notes)}</span></div>` : ''}
@@ -1458,17 +1459,22 @@
       <div class="card flush"><label class="ntg"><span><b>💳 دفعت عنه بالكي كارد (يسلّمه كاش)</b><small>لا يُطبع في الفاتورة — يُضاف الكاش للصندوق</small></span><input type="checkbox" name="swapon"><i></i></label></div>
       <div id="swapbox" hidden><div style="display:flex;flex-direction:column;gap:10px"><div class="grid2">${moneyField('swap', 'دفعت بالكي كارد', 0)}${moneyField('swapcash', 'استلمت كاش', 0)}</div><div id="swapmsg"></div><input class="input" name="swapnote" placeholder="السبب (اختياري)"></div></div>
       <div class="total-bar"><span class="ink2">المجموع</span><b class="num" id="total">0</b></div>
+      <div class="foot-note" id="feenote" hidden style="margin-top:-6px"></div>
       <div class="total-bar" id="swaptot" hidden><span class="ink2">تستلم منه كاش بالمجموع</span><b class="num green" id="swapsum">0</b></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} إصدار الفاتورة</button>`, (sb) => {
       const total = () => st.lines.reduce((a, l) => a + (l.price || 0) * (l.qty || 1), 0);
+      // الرسوم الحكومية المدفوعة عن الزبون: تُعرض في فاتورته فقط ولا تدخل في الدخل ولا الصندوق
+      const fees = () => st.lines.reduce((a, l) => a + (l.fee || 0), 0);
       const paintLines = () => {
         sb.querySelector('#lines').innerHTML = st.lines.map((l) => `<div class="line two">${l.custom ? `<input class="input n" style="height:42px;font-size:15px" data-name="${l.k}" placeholder="اسم الخدمة" value="${esc(l.name)}">` : `<div class="n">${esc(l.name)}</div>`}
           <span class="qty"><button type="button" data-dec="${l.k}">−</button><b class="num">${l.qty || 1}</b><button type="button" data-inc="${l.k}">+</button></span>
-          <input class="p" inputmode="numeric" data-price="${l.k}" value="${l.price ? fmt(l.price) : ''}" placeholder="0"><button class="x" data-rm="${l.k}">${icon('x', 15)}</button></div>`).join('');
+          <input class="p" inputmode="numeric" data-price="${l.k}" value="${l.price ? fmt(l.price) : ''}" placeholder="0"><button class="x" data-rm="${l.k}">${icon('x', 15)}</button>
+          <label class="feer"><span>الرسوم الحكومية <small>تظهر بالفاتورة، مو من الدخل</small></span><input class="p" inputmode="numeric" data-fee="${l.k}" value="${l.fee ? fmt(l.fee) : ''}" placeholder="بدون"></label></div>`).join('');
         const bump = (k, d) => { const l = st.lines.find((x) => x.k === k); l.qty = Math.max(1, Math.min(999, (l.qty || 1) + d)); paintLines(); paintTotal(); };
         sb.querySelectorAll('[data-inc]').forEach((el) => { el.onclick = () => bump(Number(el.dataset.inc), 1); });
         sb.querySelectorAll('[data-dec]').forEach((el) => { el.onclick = () => bump(Number(el.dataset.dec), -1); });
         sb.querySelectorAll('[data-price]').forEach((el) => { el.oninput = () => { const v = parseMoney(el.value); el.value = v ? fmt(v) : ''; st.lines.find((l) => l.k === Number(el.dataset.price)).price = v; paintTotal(); }; });
+        sb.querySelectorAll('[data-fee]').forEach((el) => { el.oninput = () => { const v = parseMoney(el.value); el.value = v ? fmt(v) : ''; st.lines.find((l) => l.k === Number(el.dataset.fee)).fee = v; paintTotal(); }; });
         sb.querySelectorAll('[data-name]').forEach((el) => { el.oninput = () => { st.lines.find((l) => l.k === Number(el.dataset.name)).name = el.value; }; });
         sb.querySelectorAll('[data-rm]').forEach((el) => { el.onclick = () => { st.lines = st.lines.filter((l) => l.k !== Number(el.dataset.rm)); paintLines(); paintTotal(); }; });
         sb.querySelectorAll('[data-svc]').forEach((el) => el.classList.toggle('in', st.lines.some((l) => String(l.service_id) === el.dataset.svc)));
@@ -1488,7 +1494,7 @@
         const cashInv = st.pay === 'cash' || (st.pay === 'account' && (st.pmethod?.() || 'cash') === 'cash') ? (st.pay === 'account' ? mval(sb, 'paid') : total()) : 0;
         sb.querySelector('#swapsum').textContent = fmt(cashInv + w);
       };
-      const paintTotal = () => { sb.querySelector('#total').textContent = fmt(total()); paintPay(); paintSwap(); };
+      const paintTotal = () => { sb.querySelector('#total').textContent = fmt(total() + fees()); const fn = sb.querySelector('#feenote'); fn.hidden = !fees(); fn.innerHTML = `أتعاب المكتب <b class="num">${fmt(total())}</b>، رسوم حكومية <b class="num">${fmt(fees())}</b>`; paintPay(); paintSwap(); };
       sb.querySelector('[name="swapon"]').onchange = (e) => { sb.querySelector('#swapbox').hidden = !e.target.checked; paintSwap(); };
       sb.addEventListener('input', () => paintSwap());
       sb.addEventListener('click', () => setTimeout(paintSwap, 0));
@@ -1550,7 +1556,7 @@
         const t = total();
         const account = st.pay === 'account';
         const payload = {
-          items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty || 1 })),
+          items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty || 1, fee: l.fee || 0 })),
           client_id: st.client?.id || null,
           paid_amount: account ? Math.min(mval(sb, 'paid'), t) : t,
           method: account ? (st.pmethod?.() || 'cash') : st.pay,

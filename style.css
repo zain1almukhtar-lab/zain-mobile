@@ -480,3 +480,9 @@ h2.sec { font-weight: 400; } h2.sec .more { color: var(--ink-2); font-weight: 60
 .tabs button.on { color: var(--ink); font-weight: 700; }
 .sale-inl { display: flex; flex-direction: column; gap: 12px; }
 .top .icon-btn { width: 36px; height: 36px; }
+
+/* الرسوم الحكومية لكل خدمة في فاتورة الآيفون (zm-v28) */
+.line .feer { flex: 1 0 100%; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.line .feer > span { flex: 1; line-height: 1.35; }
+.line .feer small { display: block; font-size: 11px; color: var(--muted); }
+.line .feer .p { width: 130px; flex: none; height: 38px; font-weight: 600; }
