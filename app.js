@@ -1489,14 +1489,14 @@
         const short = swapAmt() - swapGot();
         const msg = sb.querySelector('#swapmsg');
         msg.innerHTML = short > 0 ? `<div class="note ${st.client ? 'amber' : 'red'}">${st.client ? `الباقي <b class="num">${fmt(short)}</b> يُسجَّل ديناً على ${esc(st.client.name)}` : 'سلّم أقل؟ اختر «عميل مسجل» حتى يُسجَّل الباقي ديناً'}</div>` : short < 0 ? `<div class="note green">العمولة <b class="num">${fmt(-short)}</b> تُسجّل مدخولاً للمكتب</div>` : '';
-        sb.querySelector('#ok').innerHTML = `${icon('check', 18)} ${!st.lines.length && swapAmt() ? 'تسجيل كي كارد مقابل كاش (بدون فاتورة)' : 'إصدار الفاتورة'}`;
+        sb.querySelector('#ok').innerHTML = `${icon('check', 18)} ${!st.lines.length && swapAmt() ? 'تسجيل كي كارد مقابل كاش (بدون فاتورة)' : isPartial() ? 'إصدار وتسجيل الباقي ديناً' : 'إصدار الفاتورة'}`;
         const w = swapGot(); const box = sb.querySelector('#swaptot'); box.hidden = !swapAmt();
         const cashInv = st.pay === 'cash' || (st.pay === 'account' && (st.pmethod?.() || 'cash') === 'cash') ? (st.pay === 'account' ? mval(sb, 'paid') : total()) : 0;
         sb.querySelector('#swapsum').textContent = fmt(cashInv + w);
       };
-      const paintTotal = () => { sb.querySelector('#total').textContent = fmt(total() + fees()); const fn = sb.querySelector('#feenote'); fn.hidden = !fees(); fn.innerHTML = `أتعاب المكتب <b class="num">${fmt(total())}</b>، رسوم حكومية <b class="num">${fmt(fees())}</b>`; paintPay(); paintSwap(); };
+      const paintTotal = () => { if (st.recv !== null && st.recv !== undefined && st.recv >= due()) st.recv = null; sb.querySelector('#total').textContent = fmt(total() + fees()); const fn = sb.querySelector('#feenote'); fn.hidden = !fees(); fn.innerHTML = `أتعاب المكتب <b class="num">${fmt(total())}</b>، رسوم حكومية <b class="num">${fmt(fees())}</b>`; paintPay(); paintSwap(); };
       sb.querySelector('[name="swapon"]').onchange = (e) => { sb.querySelector('#swapbox').hidden = !e.target.checked; paintSwap(); };
-      sb.addEventListener('input', () => paintSwap());
+      sb.addEventListener('input', () => { paintSwap(); paintRecv(); });
       sb.addEventListener('click', () => setTimeout(paintSwap, 0));
       const paintParty = () => {
         const p = sb.querySelector('#party');
@@ -1519,6 +1519,18 @@
           p.querySelector('#chg').onclick = () => { st.client = null; paintParty(); paintPay(); };
         }
       };
+      // المستلم من الزبون: الرسوم أولاً ثم الأتعاب، والباقي ينزل على حسابه (عميل مسجل، أو جديد بالاسم والهاتف)
+      const due = () => total() - (st.client && st.useBal !== false ? Math.min(st.client.owed_to || 0, total()) : 0) + fees();
+      const isPartial = () => st.pay !== 'account' && st.lines.length > 0 && st.recv !== null && st.recv !== undefined && st.recv < due();
+      const paintRecv = () => {
+        const m = sb.querySelector('#recvmsg'); if (!m) return;
+        const rest = due() - (st.recv ?? due());
+        const who = st.client?.name || val(sb, 'cname');
+        m.innerHTML = !isPartial() ? '<div class="note green">مسدّدة كاملة</div>'
+          : st.recv < fees() ? `<div class="note red">المستلم أقل من الرسوم الحكومية (${fmt(fees())}) — لازم يغطيها على الأقل</div>`
+          : `<div class="note red">الباقي <b class="num">${fmt(rest)}</b> ينزل على حساب ${esc(who || 'الزبون')}</div>${st.client ? '' : '<div class="note amber">ما مسجّل — اكتب اسمه وهاتفه فوق، وينضاف عميلاً جديداً تلقائياً.</div>'}`;
+        sb.querySelector('#ok').innerHTML = `${icon('check', 18)} ${isPartial() ? 'إصدار وتسجيل الباقي ديناً' : 'إصدار الفاتورة'}`;
+      };
       const paintPay = () => {
         const box = sb.querySelector('#paybox');
         const opts = [['cash', 'كاش'], ['qi_card', 'كي كارد'], ...(st.kind === 'client' && st.client ? [['account', 'على الحساب']] : [])];
@@ -1529,7 +1541,10 @@
           ${seg('pay', opts, st.pay)}
           ${st.pay === 'account' ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
             ${moneyField('paid', 'المدفوع الآن (اختياري)', 0)}
-            ${seg('pmethod', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}</div>` : ''}`;
+            ${seg('pmethod', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}</div>` : ''}
+          ${st.pay !== 'account' && st.lines.length ? `<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">${moneyField('recv', 'المستلم من الزبون', st.recv ?? due())}<div id="recvmsg"></div></div>` : ''}`;
+        const rv = box.querySelector('[name="recv"]');
+        if (rv) { rv.addEventListener('input', () => { const v = mval(box, 'recv'); st.recv = v >= due() ? null : v; paintRecv(); }); paintRecv(); }
         bindSeg(box, 'pay', (v) => { st.pay = v; paintPay(); });
         const ub = box.querySelector('#usebal'); if (ub) ub.onchange = () => { st.useBal = ub.checked; };
         st.pmethod = bindSeg(box, 'pmethod');
@@ -1555,18 +1570,22 @@
         if (sb.querySelector('[name="swapon"]').checked && !mval(sb, 'swap')) return toast('أدخل مبلغ الكي كارد أو أطفئ الخيار', true);
         const t = total();
         const account = st.pay === 'account';
+        const part = isPartial();
+        if (part && st.recv < fees()) return toast('المستلم أقل من الرسوم الحكومية', true);
+        if (part && !st.client && !(val(sb, 'cname') && val(sb, 'phone'))) return toast('اكتب اسم الزبون وهاتفه حتى ينزل الباقي على حسابه', true);
         const payload = {
           items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty || 1, fee: l.fee || 0 })),
           client_id: st.client?.id || null,
-          paid_amount: account ? Math.min(mval(sb, 'paid'), t) : t,
+          paid_amount: account ? Math.min(mval(sb, 'paid'), t) : part ? Math.max(0, st.recv - fees()) : t,
           method: account ? (st.pmethod?.() || 'cash') : st.pay,
           // الرصيد أولاً: يُسدَّد من المبلغ الذي للعميل على المكتب، والباقي كاش/كي كارد أو دين
           use_balance: !!st.client && (st.client.owed_to || 0) > 0 && st.useBal !== false,
-          pay_rest: !account,
+          pay_rest: !account && !part,
           company_name: val(sb, 'company') || null,
           swap: swapAmt() > 0 ? { card_amount: swapAmt(), cash_amount: swapGot(), notes: val(sb, 'swapnote') || null, day: todayStr() } : null,
         };
         if (!st.client) { payload.customer_name = val(sb, 'cname') || null; payload.customer_phone = val(sb, 'phone') || null; }
+        if (part && !st.client) payload.new_client = { name: val(sb, 'cname'), phone: val(sb, 'phone') };
         const who = st.client?.name || payload.company_name || payload.customer_name || 'زبون مباشر';
         sendOp('sales:create', payload, swapOnly ? `كي كارد مقابل كاش ${fmt(swapAmt())} — ${who}` : `فاتورة ${fmt(t)} — ${who}`);
       };
