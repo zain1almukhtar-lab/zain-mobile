@@ -486,3 +486,22 @@ h2.sec { font-weight: 400; } h2.sec .more { color: var(--ink-2); font-weight: 60
 .line .feer > span { flex: 1; line-height: 1.35; }
 .line .feer small { display: block; font-size: 11px; color: var(--muted); }
 .line .feer .p { width: 130px; flex: none; height: 38px; font-weight: 600; }
+
+/* شاشة البيع بالآيفون (zm-v32): قائمة نحيفة + شريط الفاتورة */
+.sl-h { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); margin: 4px 4px -4px; }
+.card.flush.sl-list { padding: 0 14px; }
+.sl-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.sl-row:last-child { border-bottom: 0; }
+.sl-row .m { flex: 1; min-width: 0; }
+.sl-row .m b { display: block; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.sl-row .m span { font-size: 12.5px; color: var(--muted); }
+.sl-add { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--paper, #fff); display: grid; place-items: center; color: var(--ink); flex: none; }
+.sl-step { display: inline-flex; align-items: center; height: 38px; border-radius: 10px; background: var(--btn, #131c2b); color: var(--btn-ink, #fff); flex: none; }
+.sl-step button { width: 36px; height: 100%; font-size: 19px; color: inherit; opacity: .8; }
+.sl-step b { min-width: 22px; text-align: center; font-size: 15px; }
+.sl-bar { position: fixed; inset-inline: 16px; bottom: calc(var(--tab-h) + var(--safe-b) + 10px); z-index: 15; max-width: 608px; margin: 0 auto; background: var(--btn, #131c2b); color: var(--btn-ink, #fff); border-radius: 14px; padding: 10px 12px 10px 10px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 28px rgba(17, 26, 41, .28); }
+.sl-bar > div { flex: 1; line-height: 1.3; }
+.sl-bar span { display: block; font-size: 12px; opacity: .75; }
+.sl-bar b { font-size: 20px; font-weight: 600; }
+.sl-bar button { background: var(--paper, #fff); color: var(--ink); border-radius: 10px; padding: 11px 18px; font-weight: 700; font-size: 15px; }
+.sl-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 12px; }

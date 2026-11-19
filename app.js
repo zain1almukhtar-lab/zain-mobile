@@ -20,7 +20,7 @@
   const fmt = (n) => nf.format(Math.round(n || 0));
   const money = (n) => `<span class="num">${fmt(n)}</span> <small>د.ع</small>`;
   const parseMoney = (s) => Number(String(s ?? '').replace(/[^\d]/g, '')) || 0;
-  const METHOD = { cash: 'كاش', qi_card: 'كي كارد', balance: 'من رصيده' };
+  const METHOD = { cash: 'كاش', qi_card: 'كي كارد', pos: 'POS', balance: 'من رصيده' };
   const MONTHS = ['كانون الثاني', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران', 'تموز', 'آب', 'أيلول', 'تشرين الأول', 'تشرين الثاني', 'كانون الأول'];
   const WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const monthName = (ym) => { const [y, m] = ym.split('-'); return `${MONTHS[Number(m) - 1]} ${y}`; };
@@ -443,7 +443,7 @@
     const main = $app.querySelector('#main');
     if (!main) return;
     main.innerHTML = ({ sale: tabSale, office: tabOffice, money: tabMoney, more: tabMore })[S.tab]();
-    if (S.tab === 'sale') invoiceForm(null, main.querySelector('#saleHost'));
+    if (S.tab === 'sale') bindSale(main);
     mountEmbeds(main);
     main.querySelectorAll('[data-act]').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); act(el.dataset.act, el.dataset.v, el); }; });
     const q = main.querySelector('#q');
@@ -553,14 +553,49 @@
     ({ jrd: cashCloseSheet, sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
   }
   // البيع: نفس نموذج الفاتورة، لكن صفحة ثابتة بدل ورقة منزلقة
+  // البيع (ترتيب «أ»): شاشة وحدة لاختيار الخدمات بس — الدفع والتفاصيل بشاشة الفاتورة
+  S.cart = [];
+  let cartK = 0;
+  const cartTotal = () => S.cart.reduce((a, l) => a + (l.price || 0) * (l.qty || 1) + (l.fee || 0), 0);
   function tabSale() {
     const now = new Date();
-    return `${title('بيع جديد', `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}${statusBars()}<div id="saleHost" class="sale-inl"></div>`;
+    const q = (S.sq || '').trim();
+    const list = S.snap.services.filter((s) => !q || s.name.includes(q)).sort((a, b) => (b.uses || 0) - (a.uses || 0));
+    const row = (s) => { const l = S.cart.find((x) => x.service_id === s.id);
+      return `<div class="sl-row"><div class="m"><b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></div>${l
+        ? `<span class="sl-step"><button data-dec="${s.id}">−</button><b class="num">${l.qty}</b><button data-inc="${s.id}">+</button></span>`
+        : `<button class="sl-add press" data-inc="${s.id}">${icon('plus', 18)}</button>`}</div>`; };
+    const n = S.cart.reduce((a, l) => a + (l.qty || 1), 0);
+    return `${title('بيع جديد', `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}${statusBars()}
+      <div class="search">${icon('search', 18)}<input class="input" id="sq" type="search" placeholder="ابحث عن خدمة" value="${esc(S.sq || '')}" autocomplete="off"></div>
+      <div class="sl-h"><span>${q ? 'نتائج البحث' : 'الأكثر طلباً'}</span><span>${list.length} خدمة</span></div>
+      <div class="card flush sl-list">${list.map(row).join('') || '<div class="empty">ما لكيت خدمة بهالاسم</div>'}
+        <div class="sl-row"><div class="m"><b>خدمة أخرى</b><span>اسم ومبلغ تكتبه</span></div><button class="sl-add press" id="slc">${icon('plus', 18)}</button></div></div>
+      ${S.cart.length ? `<div class="sl-bar"><div><span>${n} ${n === 1 ? 'خدمة' : n === 2 ? 'خدمتين' : 'خدمات'}</span><b class="num">${fmt(cartTotal())}</b></div><button class="press" id="slgo">عرض الفاتورة</button></div><div style="height:84px"></div>` : ''}`;
+  }
+  function bindSale(main) {
+    const find = (id) => S.snap.services.find((s) => s.id === Number(id));
+    const bump = (id, d) => {
+      const l = S.cart.find((x) => x.service_id === Number(id));
+      if (l) { l.qty += d; if (l.qty < 1) S.cart = S.cart.filter((x) => x !== l); } else if (d > 0) { const s = find(id); S.cart.push({ k: ++cartK, service_id: s.id, name: s.name, price: s.default_price, qty: 1 }); }
+      paintMain();
+    };
+    main.querySelectorAll('[data-inc]').forEach((b) => { b.onclick = () => bump(b.dataset.inc, 1); });
+    main.querySelectorAll('[data-dec]').forEach((b) => { b.onclick = () => bump(b.dataset.dec, -1); });
+    const sq = main.querySelector('#sq');
+    if (sq) sq.oninput = () => { S.sq = sq.value; const pos = sq.selectionStart; paintMain(); const n2 = $app.querySelector('#sq'); n2.focus(); n2.setSelectionRange(pos, pos); };
+    const open = () => {
+      invoiceForm(null, null, S.cart);
+      // بعد ما تتسكّر شاشة الفاتورة نرجع نرسم القائمة (العدد ممكن تغيّر هناك)
+      const t = setInterval(() => { if (!sheetEl) { clearInterval(t); if (S.tab === 'sale') paintMain(); } }, 300);
+    };
+    main.querySelector('#slc').onclick = () => { S.cart.push({ k: ++cartK, service_id: null, name: '', price: 0, qty: 1, custom: true }); open(); };
+    const go = main.querySelector('#slgo'); if (go) go.onclick = open;
   }
   function tabToday(embed = false) {
     const sn = S.snap; const now = new Date();
     const d = sn.months[Object.keys(sn.months).sort().pop()];
-    const tRow = (d?.daily || []).find((x) => x.day === todayStr()) || { cash: 0, qi_card: 0, balance: 0 };
+    const tRow = (d?.daily || []).find((x) => x.day === todayStr()) || { cash: 0, qi_card: 0, pos: 0, balance: 0 };
     const tCount = sn.invoices.filter((x) => !x.is_void && x.created_at.slice(0, 10) === todayStr()).length;
     const newDebt = sn.invoices.filter((x) => !x.is_void && x.created_at.slice(0, 10) === todayStr()).reduce((a, x) => a + Math.max(0, x.total_amount - x.paid_amount), 0);
     const box = sn.cashToday ? sn.cashToday.expected : null;
@@ -573,7 +608,7 @@
       <div id="gsr">${searchResults()}</div>
       <div class="card hero today" data-go="cash">
         <div class="lbl">دخل اليوم <span>${tCount} فاتورة</span></div>
-        <div class="big"><span class="num">${fmt(tRow.cash + tRow.qi_card + (tRow.balance || 0))}</span><small>د.ع</small></div>
+        <div class="big"><span class="num">${fmt(tRow.cash + tRow.qi_card + (tRow.pos || 0) + (tRow.balance || 0))}</span><small>د.ع</small></div>
         <div class="g3"><div><span>بالصندوق</span><b class="num">${box === null ? '—' : fmt(box)}</b></div><div><span>كي كارد</span><b class="num">${fmt(tRow.qi_card)}</b></div><div><span>ديون جديدة</span><b class="num">${fmt(newDebt)}</b></div></div>
       </div>
       <h2 class="sec">تنتظرك ${W.length ? `<span class="cnt">${W.length}</span>` : ''}</h2>
@@ -778,7 +813,7 @@
         const extra = t - x.paid_amount;
         const box = sb.querySelector('#epay');
         if (walk && extra > 0) {
-          if (!box.dataset.on) { box.dataset.on = 1; box.innerHTML = `<div class="note">زبون مباشر: الفرق <b class="num" id="ediff"></b> يُدفع الآن</div>${seg('epm', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}`; st.pm = bindSeg(box, 'epm'); }
+          if (!box.dataset.on) { box.dataset.on = 1; box.innerHTML = `<div class="note">زبون مباشر: الفرق <b class="num" id="ediff"></b> يُدفع الآن</div>${seg('epm', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS']], 'cash')}`; st.pm = bindSeg(box, 'epm'); }
           box.querySelector('#ediff').textContent = fmt(extra);
         } else { box.dataset.on = ''; box.innerHTML = extra < 0 ? `<div class="note red">المجموع الجديد أقل من المدفوع (${fmt(x.paid_amount)})</div>` : ''; }
       };
@@ -1430,7 +1465,7 @@
     openSheet(`دفعة على ${esc(x.receipt_no)}`, `
       <div class="total-bar"><span class="ink2">المتبقي</span><b class="num">${fmt(rem)}</b></div>
       ${moneyField('amount', 'المبلغ المستلم', rem)}
-      ${seg('method', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ...(owed ? [['balance', `من رصيده ${fmt(owed)}`]] : [])], 'cash')}
+      ${seg('method', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS'], ...(owed ? [['balance', `من رصيده ${fmt(owed)}`]] : [])], 'cash')}
       <button class="btn btn-gold btn-block" id="ok">تسجيل</button>`, (sb) => {
       const method = bindSeg(sb, 'method');
       sb.querySelector('#ok').onclick = () => {
@@ -1442,22 +1477,25 @@
   }
 
   // ═════════════ فاتورة جديدة ═════════════
-  function invoiceForm(preClientId = null, inline = null) {
+  function invoiceForm(preClientId = null, inline = null, preset = null) {
     const sn = S.snap;
     const st = { lines: [], client: preClientId ? sn.clients.find((c) => c.id === Number(preClientId)) : null, kind: preClientId ? 'client' : 'walk', pay: 'cash' };
     if (st.client) st.pay = 'account';
-    let n = 0;
+    // preset: الخدمات المختارة من شاشة البيع (نفس المصفوفة، فالتعديل هنا يرجع للقائمة)
+    if (preset) st.lines = preset;
+    let n = preset ? preset.reduce((a, l) => Math.max(a, l.k || 0), 0) : 0;
     // inline: يُرسم النموذج داخل صفحة «البيع» بدل ورقة
     const host = inline ? (_t, body, mount) => { inline.innerHTML = body; bindMoney(inline); mount?.(inline, inline); return inline; } : openSheet;
     const sh = host('فاتورة جديدة', `
-      <div class="svc-grid" id="svcs">${sn.services.map((s) => `<button class="svc press" data-svc="${s.id}"><b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></button>`).join('')}
+      ${preset ? `<button class="sl-back press" id="slback">${icon('plus', 16)} إضافة خدمات أخرى</button>` : ''}
+      <div class="svc-grid" id="svcs" ${preset ? 'hidden' : ''}>${sn.services.map((s) => `<button class="svc press" data-svc="${s.id}"><b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></button>`).join('')}
         <button class="svc press" data-svc="custom"><b>${icon('plus', 16)} خدمة أخرى</b><span class="muted">اسم ومبلغ</span></button></div>
       <div id="lines" style="display:flex;flex-direction:column;gap:8px"></div>
       ${seg('kind', [['walk', 'زبون مباشر'], ['client', 'عميل مسجل']], st.kind)}
       <div id="party"></div>
       <div id="paybox"></div>
-      <div class="card flush"><label class="ntg"><span><b>💳 دفعت عنه بالكي كارد (يسلّمه كاش)</b><small>لا يُطبع في الفاتورة — يُضاف الكاش للصندوق</small></span><input type="checkbox" name="swapon"><i></i></label></div>
-      <div id="swapbox" hidden><div style="display:flex;flex-direction:column;gap:10px"><div class="grid2">${moneyField('swap', 'دفعت بالكي كارد', 0)}${moneyField('swapcash', 'استلمت كاش', 0)}</div><div id="swapmsg"></div><input class="input" name="swapnote" placeholder="السبب (اختياري)"></div></div>
+      <div class="card flush"><label class="ntg"><span><b>دفعت عنه بالبطاقة (يسلّمه كاش)</b><small>لا يُطبع في الفاتورة — يُضاف الكاش للصندوق</small></span><input type="checkbox" name="swapon"><i></i></label></div>
+      <div id="swapbox" hidden><div style="display:flex;flex-direction:column;gap:10px">${seg('swapsrc', [['qi', 'من الكي كارد'], ['ahli', 'من بطاقة الأهلي']], 'qi')}<div class="grid2">${moneyField('swap', 'دفعت بالبطاقة', 0)}${moneyField('swapcash', 'استلمت كاش', 0)}</div><div id="swapmsg"></div><input class="input" name="swapnote" placeholder="السبب (اختياري)"></div></div>
       <div class="total-bar"><span class="ink2">المجموع</span><b class="num" id="total">0</b></div>
       <div class="foot-note" id="feenote" hidden style="margin-top:-6px"></div>
       <div class="total-bar" id="swaptot" hidden><span class="ink2">تستلم منه كاش بالمجموع</span><b class="num green" id="swapsum">0</b></div>
@@ -1494,7 +1532,8 @@
         const cashInv = st.pay === 'cash' || (st.pay === 'account' && (st.pmethod?.() || 'cash') === 'cash') ? (st.pay === 'account' ? mval(sb, 'paid') : total()) : 0;
         sb.querySelector('#swapsum').textContent = fmt(cashInv + w);
       };
-      const paintTotal = () => { if (st.recv !== null && st.recv !== undefined && st.recv >= due()) st.recv = null; sb.querySelector('#total').textContent = fmt(total() + fees()); const fn = sb.querySelector('#feenote'); fn.hidden = !fees(); fn.innerHTML = `أتعاب المكتب <b class="num">${fmt(total())}</b>، رسوم حكومية <b class="num">${fmt(fees())}</b>`; paintPay(); paintSwap(); };
+      const paintTotal = () => { if (st.recv !== null && st.recv !== undefined && st.recv === due()) st.recv = null; sb.querySelector('#total').textContent = fmt(total() + fees()); const fn = sb.querySelector('#feenote'); fn.hidden = !fees(); fn.innerHTML = `أتعاب المكتب <b class="num">${fmt(total())}</b>، رسوم حكومية <b class="num">${fmt(fees())}</b>`; paintPay(); paintSwap(); };
+      st.swapsrc = bindSeg(sb, 'swapsrc');
       sb.querySelector('[name="swapon"]').onchange = (e) => { sb.querySelector('#swapbox').hidden = !e.target.checked; paintSwap(); };
       sb.addEventListener('input', () => { paintSwap(); paintRecv(); });
       sb.addEventListener('click', () => setTimeout(paintSwap, 0));
@@ -1522,18 +1561,20 @@
       // المستلم من الزبون: الرسوم أولاً ثم الأتعاب، والباقي ينزل على حسابه (عميل مسجل، أو جديد بالاسم والهاتف)
       const due = () => total() - (st.client && st.useBal !== false ? Math.min(st.client.owed_to || 0, total()) : 0) + fees();
       const isPartial = () => st.pay !== 'account' && st.lines.length > 0 && st.recv !== null && st.recv !== undefined && st.recv < due();
+      const overOf = () => (st.pay !== 'account' && st.lines.length > 0 && st.recv != null && st.recv > due() ? st.recv - due() : 0);
       const paintRecv = () => {
         const m = sb.querySelector('#recvmsg'); if (!m) return;
         const rest = due() - (st.recv ?? due());
         const who = st.client?.name || val(sb, 'cname');
-        m.innerHTML = !isPartial() ? '<div class="note green">مسدّدة كاملة</div>'
+        m.innerHTML = overOf() ? `<div class="note green">الزايد <b class="num">${fmt(overOf())}</b> ينسجل «له على المكتب» ويدخل ${st.pay === 'cash' ? 'الصندوق' : st.pay === 'pos' ? 'الـPOS' : 'الكي كارد'}، مو دخل</div>${st.client ? '' : '<div class="note amber">ما مسجّل — اكتب اسمه وهاتفه فوق، وينضاف عميلاً جديداً تلقائياً.</div>'}`
+          : !isPartial() ? '<div class="note green">مسدّدة كاملة</div>'
           : st.recv < fees() ? `<div class="note red">المستلم أقل من الرسوم الحكومية (${fmt(fees())}) — لازم يغطيها على الأقل</div>`
           : `<div class="note red">الباقي <b class="num">${fmt(rest)}</b> ينزل على حساب ${esc(who || 'الزبون')}</div>${st.client ? '' : '<div class="note amber">ما مسجّل — اكتب اسمه وهاتفه فوق، وينضاف عميلاً جديداً تلقائياً.</div>'}`;
         sb.querySelector('#ok').innerHTML = `${icon('check', 18)} ${isPartial() ? 'إصدار وتسجيل الباقي ديناً' : 'إصدار الفاتورة'}`;
       };
       const paintPay = () => {
         const box = sb.querySelector('#paybox');
-        const opts = [['cash', 'كاش'], ['qi_card', 'كي كارد'], ...(st.kind === 'client' && st.client ? [['account', 'على الحساب']] : [])];
+        const opts = [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS'], ...(st.kind === 'client' && st.client ? [['account', 'على الحساب']] : [])];
         if (!opts.some(([v]) => v === st.pay)) st.pay = 'cash';
         const owed = st.client?.owed_to || 0;
         if (st.useBal === undefined) st.useBal = true;
@@ -1541,10 +1582,10 @@
           ${seg('pay', opts, st.pay)}
           ${st.pay === 'account' ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
             ${moneyField('paid', 'المدفوع الآن (اختياري)', 0)}
-            ${seg('pmethod', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}</div>` : ''}
+            ${seg('pmethod', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS']], 'cash')}</div>` : ''}
           ${st.pay !== 'account' && st.lines.length ? `<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">${moneyField('recv', 'المستلم من الزبون', st.recv ?? due())}<div id="recvmsg"></div></div>` : ''}`;
         const rv = box.querySelector('[name="recv"]');
-        if (rv) { rv.addEventListener('input', () => { const v = mval(box, 'recv'); st.recv = v >= due() ? null : v; paintRecv(); }); paintRecv(); }
+        if (rv) { rv.addEventListener('input', () => { const v = mval(box, 'recv'); st.recv = v === due() ? null : v; paintRecv(); }); paintRecv(); }
         bindSeg(box, 'pay', (v) => { st.pay = v; paintPay(); });
         const ub = box.querySelector('#usebal'); if (ub) ub.onchange = () => { st.useBal = ub.checked; };
         st.pmethod = bindSeg(box, 'pmethod');
@@ -1573,6 +1614,9 @@
         const part = isPartial();
         if (part && st.recv < fees()) return toast('المستلم أقل من الرسوم الحكومية', true);
         if (part && !st.client && !(val(sb, 'cname') && val(sb, 'phone'))) return toast('اكتب اسم الزبون وهاتفه حتى ينزل الباقي على حسابه', true);
+        const ov = overOf();
+        if (ov && !st.client && !(val(sb, 'cname') && val(sb, 'phone'))) return toast('اكتب اسم الزبون وهاتفه حتى ينسجل الزايد باسمه', true);
+        if (ov && ov > t / 2 && !window.confirm(`المستلم أكثر من المطلوب بـ ${fmt(ov)} — ينسجل له على المكتب. متأكد؟`)) return;
         const payload = {
           items: st.lines.map((l) => ({ service_id: l.service_id, name: l.name.trim(), price: l.price, qty: l.qty || 1, fee: l.fee || 0 })),
           client_id: st.client?.id || null,
@@ -1582,13 +1626,16 @@
           use_balance: !!st.client && (st.client.owed_to || 0) > 0 && st.useBal !== false,
           pay_rest: !account && !part,
           company_name: val(sb, 'company') || null,
-          swap: swapAmt() > 0 ? { card_amount: swapAmt(), cash_amount: swapGot(), notes: val(sb, 'swapnote') || null, day: todayStr() } : null,
+          swap: swapAmt() > 0 ? { card_amount: swapAmt(), cash_amount: swapGot(), notes: val(sb, 'swapnote') || null, day: todayStr(), source: st.swapsrc?.() || 'qi' } : null,
         };
         if (!st.client) { payload.customer_name = val(sb, 'cname') || null; payload.customer_phone = val(sb, 'phone') || null; }
-        if (part && !st.client) payload.new_client = { name: val(sb, 'cname'), phone: val(sb, 'phone') };
+        if ((part || ov) && !st.client) payload.new_client = { name: val(sb, 'cname'), phone: val(sb, 'phone') };
+        if (ov) payload.overpay = { amount: ov };
         const who = st.client?.name || payload.company_name || payload.customer_name || 'زبون مباشر';
+        if (preset) { preset.length = 0; S.sq = ''; } // صدرت: نفرّغ قائمة البيع
         sendOp('sales:create', payload, swapOnly ? `كي كارد مقابل كاش ${fmt(swapAmt())} — ${who}` : `فاتورة ${fmt(t)} — ${who}`);
       };
+      if (preset) { sb.querySelector('#slback').onclick = () => closeSheet(); paintLines(); paintTotal(); }
       paintParty(); paintPay();
     });
     return sh;
@@ -1697,7 +1744,7 @@
   function settleAllSheet(c) {
     openSheet('تسديد كل الديون', `
       <div class="total-bar"><span class="ink2">${esc(c.name)}</span><b class="num">${fmt(c.balance)}</b></div>
-      ${seg('method', [['cash', 'كاش'], ['qi_card', 'كي كارد']], 'cash')}
+      ${seg('method', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS']], 'cash')}
       <button class="btn btn-green btn-block" id="ok">${icon('check', 18)} تم التسديد</button>`, (sb) => {
       const m = bindSeg(sb, 'method');
       sb.querySelector('#ok').onclick = () => sendOp('debts:settleClient', { client_id: c.id, method: m() }, `تسديد ديون ${c.name} ${fmt(c.balance)}`);
@@ -1747,8 +1794,8 @@
   // ═════════════ الدخل اليومي: كل يوم بالتفصيل (كاش / كي كارد) لأي شهر ═════════════
   function dayIncome(day) {
     const d = S.snap.months[day.slice(0, 7)];
-    const r = (d?.daily || []).find((x) => x.day === day) || { cash: 0, qi_card: 0, balance: 0 };
-    return { ...r, total: r.cash + r.qi_card + (r.balance || 0) };
+    const r = (d?.daily || []).find((x) => x.day === day) || { cash: 0, qi_card: 0, pos: 0, balance: 0 };
+    return { ...r, total: r.cash + r.qi_card + (r.pos || 0) + (r.balance || 0) };
   }
   function finDays() {
     const sn = S.snap;
@@ -1771,7 +1818,7 @@
         return `<button class="item noic day-row ${r.total ? '' : 'zero'}" data-day="${r.day}">
           <div class="dnum"><b class="num">${Number(r.day.slice(8))}</b><span>${WEEK[new Date(`${r.day}T12:00:00`).getDay()]}</span></div>
           <div class="m"><div class="dbar"><i class="c" style="width:${(r.cash / max) * 100}%"></i><i class="q" style="width:${(r.qi_card / max) * 100}%"></i></div>
-            <div class="dvals">${r.total ? `<i class="green">كاش <em class="num">${fmt(r.cash)}</em></i><i class="blue">كي <em class="num">${fmt(r.qi_card)}</em></i>${r.balance ? `<i>رصيد <em class="num">${fmt(r.balance)}</em></i>` : ''}` : '<i>لا يوجد دخل</i>'}${n ? `<i class="muted">${n} فاتورة</i>` : ''}</div></div>
+            <div class="dvals">${r.total ? `<i class="green">كاش <em class="num">${fmt(r.cash)}</em></i><i class="blue">كي <em class="num">${fmt(r.qi_card)}</em></i>${r.pos ? `<i>POS <em class="num">${fmt(r.pos)}</em></i>` : ''}${r.balance ? `<i>رصيد <em class="num">${fmt(r.balance)}</em></i>` : ''}` : '<i>لا يوجد دخل</i>'}${n ? `<i class="muted">${n} فاتورة</i>` : ''}</div></div>
           <div class="e"><b class="num">${r.total ? fmt(r.total) : '—'}</b></div></button>`;
       }).join('')}</div>
       <div class="foot-note">اضغط على أي يوم لتفاصيله · الفواتير متوفرة لآخر ${sn.invoiceDays || 90} يوماً</div>`;
@@ -1787,7 +1834,7 @@
     const [, mm, dd] = day.split('-');
     openSheet(`${WEEK[new Date(`${day}T12:00:00`).getDay()]} ${Number(dd)} ${MONTHS[Number(mm) - 1]}`, `
       <div class="card hero" style="margin:0"><div class="lbl">دخل اليوم</div><div class="big"><span class="num">${fmt(r.total)}</span><small>د.ع</small></div>
-        <div class="split"><div><span>كاش</span><b class="num">${fmt(r.cash)}</b></div><div><span>كي كارد</span><b class="num">${fmt(r.qi_card)}</b></div>${r.balance ? `<div><span>من الرصيد</span><b class="num">${fmt(r.balance)}</b></div>` : ''}</div></div>
+        <div class="split"><div><span>كاش</span><b class="num">${fmt(r.cash)}</b></div><div><span>كي كارد</span><b class="num">${fmt(r.qi_card)}</b></div>${r.pos ? `<div><span>POS</span><b class="num">${fmt(r.pos)}</b></div>` : ''}${r.balance ? `<div><span>من الرصيد</span><b class="num">${fmt(r.balance)}</b></div>` : ''}</div></div>
       ${close ? `<div class="card"><div class="kv"><span>جرد الصندوق</span><b>${esc(close.full_name)}</b></div><div class="kv"><span>الكاش: المفروض / المعدود</span><b class="num">${fmt(close.expected_cash)} / ${fmt(close.counted_cash)}</b></div>${close.difference ? `<div class="kv"><span>فرق الكاش</span><b class="num ${close.difference < 0 ? 'red' : 'green'}">${close.difference > 0 ? '+' : ''}${fmt(close.difference)}</b></div>` : ''}${close.counted_qi != null ? `<div class="kv"><span>الكي كارد: المسجّل / الجهاز</span><b class="num">${fmt(close.expected_qi)} / ${fmt(close.counted_qi)}</b></div>` : ''}${close.notes ? `<div class="kv"><span>السبب</span><span>${esc(close.notes)}</span></div>` : ''}</div>` : ''}
       ${oldInv ? `<div class="note">تفاصيل الفواتير متوفرة لآخر ${sn.invoiceDays || 90} يوماً — الأرقام أعلاه للدخل الكامل لهذا اليوم</div>` : `
       <h2 class="sec" style="margin:0 4px">فواتير اليوم (${invs.filter((x) => !x.is_void).length})</h2>
@@ -1839,7 +1886,7 @@
     const lab = (v, lo, hi) => (v === 0 ? 'مطابق' : v < 0 ? lo : hi);
     const c = S.snap.cashToday;
     const today = c ? `<h2 class="sec">الصندوق اليوم</h2>
-      <div class="kpis">${kpi('المفروض بالصندوق', `<span class="gold">${money(c.expected)}</span>`, `كاش ${fmt(c.cashIn + (c.swapIn || 0))} − مصاريف ${fmt(c.spendOut)} − لعملاء ${fmt(c.cashOut)}`, 'wide')}${kpi('كي كارد اليوم', money(c.qiIn), `${c.moves} حركة`)}${kpi('الجرد', c.closing ? (c.closing.difference || c.closing.qi_difference ? '<span class="red">بيه فرق</span>' : '<span class="green">مطابق</span>') : '<span class="muted">لم يُجرد</span>', c.closing ? `${esc(c.closing.closed_by_name)} · ${c.closing.difference ? `كاش ${c.closing.difference > 0 ? '+' : ''}${fmt(c.closing.difference)}` : 'كاش مطابق'}` : '')}</div>
+      <div class="kpis">${kpi('المفروض بالصندوق', `<span class="gold">${money(c.expected)}</span>`, `كاش ${fmt(c.cashIn + (c.swapIn || 0))} − مصاريف ${fmt(c.spendOut)} − لعملاء ${fmt(c.cashOut)}`, 'wide')}${kpi('كي كارد اليوم', money(c.qiIn), `${c.moves} حركة`)}${c.posIn ? kpi('POS اليوم', money(c.posIn), 'يطابق ورقة الجهاز') : ''}${kpi('الجرد', c.closing ? (c.closing.difference || c.closing.qi_difference ? '<span class="red">بيه فرق</span>' : '<span class="green">مطابق</span>') : '<span class="muted">لم يُجرد</span>', c.closing ? `${esc(c.closing.closed_by_name)} · ${c.closing.difference ? `كاش ${c.closing.difference > 0 ? '+' : ''}${fmt(c.closing.difference)}` : 'كاش مطابق'}` : '')}</div>
       ${pendingRows(['cash:close'])}
       ${c.day === todayStr() && !pendingOf(['cash:close']).length ? `<button class="btn ${c.closing ? 'btn-ghost' : 'btn-gold'} btn-block" id="jrd">${icon('cash', 18)} ${c.closing ? 'إعادة جرد اليوم' : 'جرد الصندوق اليوم'}</button>` : ''}
       ${c.closing && (c.closing.reason || c.closing.qi_reason) ? `<div class="note">السبب: ${esc([c.closing.reason, c.closing.qi_reason].filter(Boolean).join(' / '))}</div>` : ''}
@@ -1870,28 +1917,33 @@
   function cashCloseSheet() {
     const c = S.snap.cashToday; if (!c) return toast('حدّث برنامج المكتب على الحاسبة الرئيسية', true);
     openSheet('جرد الصندوق اليوم', `
-      <div class="kpis">${kpi('المفروض كاش', `<span class="gold">${money(c.expected)}</span>`)}${kpi('الكي كارد المسجّل', money(c.qiIn))}</div>
+      <div class="kpis">${kpi('المفروض كاش', `<span class="gold">${money(c.expected)}</span>`)}${kpi('الكي كارد المسجّل', money(c.qiIn))}${kpi('الـPOS المسجّل', money(c.posIn || 0))}</div>
       <div class="note">الأرقام حسب آخر مزامنة (${ago(S.snap.at)}). إذا انقطعت فاتورة بعدها، برنامج المكتب يحسب الجرد على الرقم الصحيح ويطلب السبب إذا اكو فرق.</div>
       ${moneyField('cnt', 'الكاش المعدود فعلياً بالصندوق')}
       <div class="field" id="rw" hidden><label id="rl">سبب الفرق</label><input class="input" name="rs" placeholder="مثال: صرفنا أجور نقل من الصندوق"></div>
-      ${moneyField('qi', 'مجموع الكي كارد حسب جهاز الدفع', c.qiIn)}
+      ${moneyField('qi', 'مجموع الكي كارد حسب تطبيق الكي', c.qiIn)}
       <div class="field" id="qw" hidden><label id="ql">سبب فرق الكي كارد</label><input class="input" name="qr"></div>
+      ${moneyField('pos', 'مجموع الـPOS حسب ورقة الجهاز', c.posIn || 0)}
+      <div class="field" id="pw" hidden><label id="pl">سبب فرق الـPOS</label><input class="input" name="pr"></div>
       <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ الجرد</button>`, (sb) => {
       const upd = () => {
-        const d1 = mval(sb, 'cnt') - c.expected; const d2 = mval(sb, 'qi') - c.qiIn;
+        const d1 = mval(sb, 'cnt') - c.expected; const d2 = mval(sb, 'qi') - c.qiIn; const d3 = mval(sb, 'pos') - (c.posIn || 0);
+        sb.querySelector('#pw').hidden = !d3;
+        sb.querySelector('#pl').textContent = d3 > 0 ? `ورقة الجهاز أكثر بـ ${fmt(d3)} — السبب؟` : `ورقة الجهاز أقل بـ ${fmt(-d3)} — السبب؟`;
         const touched = (sb.querySelector('[name=cnt]').value || '').trim() !== '';
         sb.querySelector('#rw').hidden = !(touched && d1); sb.querySelector('#qw').hidden = !d2;
         sb.querySelector('#rl').textContent = d1 > 0 ? `زيادة ${fmt(d1)} — شنو السبب؟` : `نقص ${fmt(-d1)} — شنو السبب؟`;
         sb.querySelector('#ql').textContent = d2 > 0 ? `الجهاز أكثر بـ ${fmt(d2)} — السبب؟` : `الجهاز أقل بـ ${fmt(-d2)} — السبب؟`;
-        return { d1, d2, touched };
+        return { d1, d2, d3, touched };
       };
       sb.addEventListener('input', upd); upd();
       sb.querySelector('#ok').onclick = () => {
-        const { d1, d2, touched } = upd();
+        const { d1, d2, d3, touched } = upd();
+        if (d3 && !val(sb, 'pr')) return toast('اكتب سبب فرق الـPOS', true);
         if (!touched) return toast('اكتب الكاش المعدود', true);
         if (d1 && !val(sb, 'rs')) return toast('اكتب سبب فرق الكاش', true);
         if (d2 && !val(sb, 'qr')) return toast('اكتب سبب فرق الكي كارد', true);
-        sendOp('cash:close', { counted: mval(sb, 'cnt'), reason: val(sb, 'rs'), counted_qi: mval(sb, 'qi'), qi_reason: val(sb, 'qr'), day: c.day }, `جرد الصندوق ${c.day}${d1 ? ` — ${d1 > 0 ? 'زيادة' : 'نقص'} ${fmt(Math.abs(d1))}` : ' — مطابق'}`);
+        sendOp('cash:close', { counted: mval(sb, 'cnt'), reason: val(sb, 'rs'), counted_qi: mval(sb, 'qi'), qi_reason: val(sb, 'qr'), counted_pos: mval(sb, 'pos'), pos_reason: val(sb, 'pr'), day: c.day }, `جرد الصندوق ${c.day}${d1 ? ` — ${d1 > 0 ? 'زيادة' : 'نقص'} ${fmt(Math.abs(d1))}` : ' — مطابق'}`);
       };
     });
   }
