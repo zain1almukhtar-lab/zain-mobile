@@ -505,3 +505,18 @@ h2.sec { font-weight: 400; } h2.sec .more { color: var(--ink-2); font-weight: 60
 .sl-bar b { font-size: 20px; font-weight: 600; }
 .sl-bar button { background: var(--paper, #fff); color: var(--ink); border-radius: 10px; padding: 11px 18px; font-weight: 700; font-size: 15px; }
 .sl-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 12px; }
+
+/* البيع: مربعات بعمودين + أقسام */
+.sl-cats { display: flex; gap: 6px; overflow-x: auto; margin: 2px -16px 0; padding: 2px 16px 4px; scrollbar-width: none; }
+.sl-cats::-webkit-scrollbar { display: none; }
+.sl-cats button { flex: none; border: 1px solid var(--line-2); background: var(--paper, #fff); color: var(--ink-2); border-radius: 20px; padding: 6px 13px; font-size: 13px; font-weight: 600; }
+.sl-cats button.on { background: var(--btn, #131c2b); color: var(--btn-ink, #fff); border-color: transparent; }
+.sl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sl-tile { position: relative; text-align: start; background: var(--paper, #fff); border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 11px; min-height: 68px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; color: var(--ink); }
+.sl-tile b { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.sl-tile > span:not(.q) { font-size: 12.5px; color: var(--muted); }
+.sl-tile.in { border: 2px solid var(--btn, #131c2b); padding: 9px 10px; }
+.sl-tile.in b { padding-left: 30px; }
+.sl-tile .q { position: absolute; top: 6px; left: 6px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px; background: var(--btn, #131c2b); color: var(--btn-ink, #fff); font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.sl-tile.other { border-style: dashed; color: var(--ink-2); }
+.sl-tile.other svg { opacity: .7; }

@@ -560,17 +560,22 @@
   function tabSale() {
     const now = new Date();
     const q = (S.sq || '').trim();
-    const list = S.snap.services.filter((s) => !q || s.name.includes(q)).sort((a, b) => (b.uses || 0) - (a.uses || 0));
+    // مربعات بعمودين + أقسام: الأكثر طلباً (افتراضي)، كل قسم، الكل. البحث يدوّر بالكل
+    const all = S.snap.services.slice().sort((a, b) => (b.uses || 0) - (a.uses || 0));
+    const cats = [...new Set(all.map((s) => s.category || 'أخرى'))];
+    const cat = S.scat || 'top';
+    const top = all.filter((s) => s.uses > 0).slice(0, 12);
+    const list = q ? all.filter((s) => s.name.includes(q)) : cat === 'all' ? all : cat === 'top' ? (top.length ? top : all) : all.filter((s) => (s.category || 'أخرى') === cat);
     const row = (s) => { const l = S.cart.find((x) => x.service_id === s.id);
-      return `<div class="sl-row"><div class="m"><b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></div>${l
-        ? `<span class="sl-step"><button data-dec="${s.id}">−</button><b class="num">${l.qty}</b><button data-inc="${s.id}">+</button></span>`
-        : `<button class="sl-add press" data-inc="${s.id}">${icon('plus', 18)}</button>`}</div>`; };
+      return `<button class="sl-tile press${l ? ' in' : ''}" data-inc="${s.id}">${l ? `<span class="q num" data-dec="${s.id}">${l.qty}</span>` : ''}<b>${esc(s.name)}</b><span class="num">${s.default_price ? fmt(s.default_price) : 'حسب الطلب'}</span></button>`; };
+    const chips = q ? '' : `<div class="sl-cats">${[['top', 'الأكثر طلباً'], ...cats.map((c) => [c, c]), ['all', 'الكل']].map(([k, t]) => `<button class="press${k === cat ? ' on' : ''}" data-cat="${esc(k)}">${esc(t)}</button>`).join('')}</div>`;
     const n = S.cart.reduce((a, l) => a + (l.qty || 1), 0);
     return `${title('بيع جديد', `${WEEK[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`)}${statusBars()}
       <div class="search">${icon('search', 18)}<input class="input" id="sq" type="search" placeholder="ابحث عن خدمة" value="${esc(S.sq || '')}" autocomplete="off"></div>
-      <div class="sl-h"><span>${q ? 'نتائج البحث' : 'الأكثر طلباً'}</span><span>${list.length} خدمة</span></div>
-      <div class="card flush sl-list">${list.map(row).join('') || '<div class="empty">ما لكيت خدمة بهالاسم</div>'}
-        <div class="sl-row"><div class="m"><b>خدمة أخرى</b><span>اسم ومبلغ تكتبه</span></div><button class="sl-add press" id="slc">${icon('plus', 18)}</button></div></div>
+      ${chips}
+      <div class="sl-h"><span>${q ? 'نتائج البحث' : ''}</span><span>${list.length} خدمة</span></div>
+      <div class="sl-grid">${list.map(row).join('') || '<div class="empty" style="grid-column:1/-1">ما لكيت خدمة بهالاسم</div>'}
+        <button class="sl-tile press other" id="slc">${icon('plus', 18)}<b>خدمة أخرى</b><span>اسم ومبلغ تكتبه</span></button></div>
       ${S.cart.length ? `<div class="sl-bar"><div><span>${n} ${n === 1 ? 'خدمة' : n === 2 ? 'خدمتين' : 'خدمات'}</span><b class="num">${fmt(cartTotal())}</b></div><button class="press" id="slgo">عرض الفاتورة</button></div><div style="height:84px"></div>` : ''}`;
   }
   function bindSale(main) {
@@ -581,7 +586,9 @@
       paintMain();
     };
     main.querySelectorAll('[data-inc]').forEach((b) => { b.onclick = () => bump(b.dataset.inc, 1); });
-    main.querySelectorAll('[data-dec]').forEach((b) => { b.onclick = () => bump(b.dataset.dec, -1); });
+    // العدد على زاوية المربع: الضغط عليه ينقّص واحد
+    main.querySelectorAll('[data-dec]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); bump(b.dataset.dec, -1); }; });
+    main.querySelectorAll('[data-cat]').forEach((b) => { b.onclick = () => { S.scat = b.dataset.cat; paintMain(); }; });
     const sq = main.querySelector('#sq');
     if (sq) sq.oninput = () => { S.sq = sq.value; const pos = sq.selectionStart; paintMain(); const n2 = $app.querySelector('#sq'); n2.focus(); n2.setSelectionRange(pos, pos); };
     const open = () => {
