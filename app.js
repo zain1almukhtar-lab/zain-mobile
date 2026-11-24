@@ -544,12 +544,14 @@
     const tasks = (S.snap.tasks || []).filter((t) => t.due_date <= todayStr());
     if (tasks.length) out.push({ c: 'var(--blue)', b: `${tasks.length} ${tasks.length > 1 ? 'أعمال' : 'عمل'} اليوم والمتأخرة`, s: esc(tasks[0].title), go: 'عرض', a: 'tasks' });
     const pAbs = (S.snap.sal?.staff || []).reduce((t, u) => t + (u.pending || []).length, 0);
+    (S.snap.checks || []).slice(0, 2).forEach((x) => out.push({ c: 'var(--red)', b: 'فاحص الحسابات', s: esc(x.text), go: 'عرض', a: 'checks' }));
     if (pAbs && !D) out.push({ c: 'var(--muted)', b: `${pAbs} خصم ينتظر الراتب الجاي`, s: 'غياب / تأخير', go: 'عرض', a: 'abs' });
     return out.slice(0, 6); // أهم 6 بس حتى تبقى الشاشة قصيرة
   }
   function goAction(a) {
     if (a.startsWith('tx:')) return txnSheet(Number(a.slice(3)));
     if (a.startsWith('add:')) return addAction(a.slice(4));
+    if (a === 'checks') return openSheet('فاحص الحسابات', `<div class="card flush">${(S.snap.checks || []).map((x) => `<div class="item noic"><div class="m"><b style="font-weight:500;font-size:14px">${esc(x.text)}</b></div></div>`).join('') || '<div class="empty">كلشي مطابق ✓</div>'}</div><div class="muted" style="font-size:12.5px">«تمام، مقصود» من الحاسبة الرئيسية.</div>`, () => {});
     ({ jrd: cashCloseSheet, sal: salPaySheet, contracts: contractsSheet, expiries: expiriesSheet, tasks: tasksSheet, abs: absSheet, activity: activitySheet, cash: () => { S.tab = 'money'; S.fin = 'cash'; render(); } })[a]?.();
   }
   // البيع: نفس نموذج الفاتورة، لكن صفحة ثابتة بدل ورقة منزلقة
@@ -1728,16 +1730,18 @@
         ${c.phone ? `<a class="icon-btn" style="color:var(--green)" href="tel:${esc(c.phone)}">${icon('phone', 19)}</a>` : ''}
         ${c.phone && c.balance && waLink(c.phone, 'x') ? `<a class="icon-btn" style="color:var(--green)" target="_blank" rel="noopener" href="${waLink(c.phone, reminder(debtGroups().find((g) => g.client_id === c.id) || { name: c.name, total: c.balance, inv: [] }))}">${icon('chat', 19)}</a>` : ''}
       </div>
-      <div class="kpis">${kpi('عليه للمكتب', `<span class="red">${money(c.balance)}</span>`, `${c.open_count} فاتورة`)}${kpi('له على المكتب', `<span class="amber">${money(c.owed_to)}</span>`)}</div>
+      <div class="kpis">${kpi('عليه للمكتب', `<span class="red">${money(c.balance)}</span>`, `${c.open_count} فاتورة${c.fee_owed > 0 ? ` · رسوم ${fmt(c.fee_owed)}` : ''}`)}${kpi('له على المكتب', `<span class="amber">${money(c.owed_to)}</span>`, c.aside_to > 0 ? `منها على جنب ${fmt(c.aside_to)}` : '')}</div>
       <div class="grid2">
         <button class="btn btn-gold" id="inv">${icon('receipt', 17)} فاتورة جديدة</button>
         <button class="btn btn-ghost" id="addp">${icon('plus', 17)} مبلغ له</button>
       </div>
+      <button class="btn btn-gold btn-block" id="recv">${icon('cash', 18)} استلمت فلوس</button>
       ${c.balance ? `<button class="btn btn-green btn-block" id="all">${icon('check', 18)} تسديد كل الديون ${fmt(c.balance)}</button>` : ''}
       ${debts.length ? `<h2 class="sec" style="margin-top:0">الديون المفتوحة</h2><div class="card flush">${debts.map((d) => `<button class="item" data-open="debt:${d.id}"><div class="m"><b>${esc(d.receipt_no)} · ${esc(d.service_name)}</b><span>${esc(d.company_name || '')}${d.company_name ? ' · ' : ''}${daysSince(d.created_at) ? `منذ ${daysSince(d.created_at)} يوم` : 'اليوم'} · مدفوع ${fmt(d.paid_amount)}</span></div><div class="e"><b class="red num">${fmt(d.total_amount - d.paid_amount)}</b><span class="chip gold">دفعة</span></div></button>`).join('')}</div>` : ''}
       ${pays.length ? `<h2 class="sec" style="margin-top:0">مبالغ له على المكتب</h2><div class="card flush">${pays.map((p) => `<button class="item noic" data-pay="${p.id}"><div class="m"><b>${esc(p.reason)}</b><span>${p.created_at.slice(0, 10)}</span></div><div class="e"><b class="amber num">${fmt(p.amount)}</b><span class="chip">إدارة</span></div></button>`).join('')}</div>` : ''}`, (sb) => {
       sb.querySelector('#inv').onclick = () => invoiceForm(c.id);
       sb.querySelector('#addp').onclick = () => payableSheet(c);
+      sb.querySelector('#recv').onclick = () => receiveSheet(c);
       sb.querySelector('#all')?.addEventListener('click', () => settleAllSheet(c));
       bindRows(sb);
       sb.querySelectorAll('[data-pay]').forEach((b) => { b.onclick = () => payableSheet(c, pays.find((p) => String(p.id) === b.dataset.pay)); });
@@ -1747,6 +1751,32 @@
     const d = S.snap.debts.find((x) => String(x.id) === String(id));
     const inv = S.snap.invoices.find((x) => String(x.id) === String(id)) || { ...d, receipt_no: d.receipt_no };
     paySheet(inv, S.snap.clients.find((c) => c.id === d.client_id));
+  }
+  // «استلمت فلوس»: مبلغ واحد يتقسّم حسب «الفلوس لشنو؟» — نفس الحاسبة
+  function receiveSheet(c) {
+    const owes = c.balance || 0; const fo = c.fee_owed || 0;
+    openSheet(`استلمت فلوس من ${esc(c.name)}`, `
+      ${moneyField('amount', 'المبلغ', 0)}
+      ${seg('method', [['cash', 'كاش'], ['qi_card', 'كي كارد'], ['pos', 'POS']], 'cash')}
+      <h2 class="sec" style="margin:4px 4px 0">الفلوس لشنو؟</h2>
+      ${owes ? moneyField('debt', `تسديد دين قديم (عليه ${fmt(owes)})`, 0) : ''}
+      ${moneyField('credit', 'شغل جاي / بعدني أحسب', 0)}
+      ${moneyField('aside', 'رسوم حكومية أدفعها بعدين', 0)}
+      ${fo ? `${moneyField('fees', `رجّعلي رسوم دفعتها عنه (عليه ${fmt(fo)})`, 0)}${seg('dest', [['box', 'ترجع للدرج'], ['pocket', 'لجيبي']], 'box')}` : ''}
+      <div class="muted" id="left" style="font-size:13px;text-align:center"></div>
+      <button class="btn btn-gold btn-block" id="ok">${icon('check', 18)} حفظ</button>`, (sb) => {
+      const m = bindSeg(sb, 'method'); const d = fo ? bindSeg(sb, 'dest') : () => 'box';
+      const v = (k) => (sb.querySelector(`[name=${k}]`) ? mval(sb, k) : 0);
+      const upd = () => { const a = v('amount'); const t = v('debt') + v('credit') + v('aside') + v('fees'); sb.querySelector('#left').textContent = a ? (t === a ? 'موزّع كله ✓' : `باقي ${fmt(a - t)} ما موزّع`) : ''; };
+      sb.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      sb.querySelector('#ok').onclick = () => {
+        const amount = v('amount'); const p = { debt: v('debt'), credit: v('credit'), aside: v('aside'), fees: v('fees') };
+        if (!amount) return toast('اكتب المبلغ', true);
+        if (p.debt > owes || p.fees > fo) return toast('المبلغ أكثر من دينه', true);
+        if (p.debt + p.credit + p.aside + p.fees !== amount) return toast('وزّع المبلغ كله', true);
+        sendOp('money:receive', { client_id: c.id, amount, method: m(), ...p, fees_dest: d() }, `استلمت ${fmt(amount)} من ${c.name}`);
+      };
+    });
   }
   function settleAllSheet(c) {
     openSheet('تسديد كل الديون', `
